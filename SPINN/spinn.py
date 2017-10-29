@@ -67,10 +67,8 @@ class SPINN(nn.Module):
                     reduce_ids.append(b_id)
                     r = stack_batch[b_id].pop()
                     l = stack_batch[b_id].pop()
-                    reduce_lh.append(l[0])
-                    reduce_lc.append(l[1])
-                    reduce_rh.append(r[0])
-                    reduce_rc.append(r[1])
+                    reduce_lh.append(l[0]); reduce_lc.append(l[1])
+                    reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
             if len(reduce_ids) > 0:
                 h_lefts = torch.cat(reduce_lh)

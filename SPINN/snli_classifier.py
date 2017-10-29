@@ -10,6 +10,10 @@ class SNLIClassifier(nn.Module):
         self.output = nn.Linear(4 * hidden_size, 4)
         self.encoder = SPINN(embed_dim, hidden_size)
 
+    def set_weight(self, weight):
+        self.embed.weight.data.copy_(torch.from_numpy(weight))
+        self.embed.weight.requires_grad = False
+
     def forward(self, hypothesis, premise):
         prem_embed = self.embed(premise[0])
         hypo_embed = self.embed(hypothesis[0])
