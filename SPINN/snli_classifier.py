@@ -4,11 +4,14 @@ from torch.autograd import Variable
 from spinn import SPINN
 
 class SNLIClassifier(nn.Module):
-    def __init__(self, embed_dim, vocab_size, hidden_size):
+    def __init__(self, args, vocab_size):
+        self.args = args
         super(SNLIClassifier, self).__init__()
-        self.embed = nn.Embedding(vocab_size, embed_dim)
-        self.output = nn.Linear(4 * hidden_size, 4)
-        self.encoder = SPINN(embed_dim, hidden_size)
+        self.embed = nn.Embedding(vocab_size, self.args.embed_dim)
+
+        coeff = 4
+        self.output = nn.Linear(coeff * self.args.hidden_size, coeff)
+        self.encoder = SPINN(self.args)
 
     def set_weight(self, weight):
         self.embed.weight.data.copy_(torch.from_numpy(weight))

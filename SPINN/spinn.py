@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from actions import Reduce
-
+from constants import PAD, SHIFT, REDUCE
 
 class Stack():
     # Figure out Thin Stack.
@@ -20,33 +20,39 @@ class Stack():
 
 class Buffer():
     def __init__(self, h_s, c_s):
-        self.states = zip(list(torch.split(h_s.squeeze(0), 1, 0)), list(torch.split(c_s.squeeze(0), 1, 0)))
+        self.states = zip(
+            list(torch.split(h_s.squeeze(0), 1, 0)),
+            list(torch.split(c_s.squeeze(0), 1, 0))
+        )
     def pop(self):
         top = self.states.pop()
         return (top)
 
-PAD = 1
-SHIFT = 3
-REDUCE = 2
 
 class SPINN(nn.Module):
     #TODO: Add tracking LSTM
-    def __init__(self, embed_dim, size, transitions=True):
+    def __init__(self, args, transitions=True):
         super(SPINN, self).__init__()
-        self.word = nn.Linear(embed_dim, 2 * size)
+        self.args = args
+        self.word = nn.Linear(self.args.embed_dim, 2 * self.args.hidden_size)
         if not transitions:
-            self.track = nn.Linear(size, 2)
-        self.reduce = Reduce(size)
+            self.track = nn.Linear(self.args.hidden_size, 2)
+        self.reduce = Reduce(self.args.hidden_size)
 
     def forward(self, sentence, transitions):
         out = self.word(sentence)
         (h_sent, c_sent) = torch.chunk(out, 2, 2)
-        buffer_batch = [Buffer(h_s, c_s) for h_s, c_s in zip(list(torch.split(h_sent, 1, 0)),list(torch.split(c_sent, 1, 0)))]
+        buffer_batch = [Buffer(h_s, c_s) for h_s, c_s
+            in zip(
+                list(torch.split(h_sent, 1, 0)),
+                list(torch.split(c_sent, 1, 0))
+            )
+        ]
         stack_batch = [Stack() for _ in buffer_batch]
-        transitions_batch = [trans.squeeze(1) for trans in list(torch.split(transitions, 1, 1))]
+        transitions_batch = [trans.squeeze(1) for trans
+            in list(torch.split(transitions, 1, 1))]
 
         batch_size = len(buffer_batch)
-
         for time_stamp in range(len(transitions_batch)):
             reduce_ids = []
             reduce_lh, reduce_lc = [], []
@@ -84,12 +90,3 @@ class SPINN(nn.Module):
             outputs.append(stack.pop()[0])
 
         return torch.cat(outputs)
-
-
-
-
-
-
-
-
-
