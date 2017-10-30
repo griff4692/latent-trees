@@ -45,7 +45,7 @@ class SNLIClassifier(nn.Module):
 
         features = self.prepare_features(hyp_encode, prem_encode)
         features = self.batch_norm_mlp_input(features)
-        featuers = self.dropout(features)
+        features = self.dropout(features)
 
         for (i, layer) in enumerate(self.mlp):
             # ReLu plus weight matrix
