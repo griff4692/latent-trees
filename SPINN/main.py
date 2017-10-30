@@ -100,6 +100,7 @@ if __name__=='__main__':
     parser.add_argument('--hidden_size', type=int, default=300)
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=10, help='number of epochs between evaluation on dev set.')
 
     args = parser.parse_args()

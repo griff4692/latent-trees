@@ -3,30 +3,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 from actions import Reduce
 from constants import PAD, SHIFT, REDUCE
-
-class Stack():
-    # Figure out Thin Stack.
-    # Seems like an overhead at this stage.
-    def __init__(self):
-        self.states = []
-
-    def add(self, state, id=0):
-        self.states.append(state)
-
-    def pop(self):
-        top = self.states.pop()
-        return top
-
-
-class Buffer():
-    def __init__(self, h_s, c_s):
-        self.states = zip(
-            list(torch.split(h_s.squeeze(0), 1, 0)),
-            list(torch.split(c_s.squeeze(0), 1, 0))
-        )
-    def pop(self):
-        top = self.states.pop()
-        return (top)
+from buffer import Buffer
+from stack import create_stack
 
 
 class SPINN(nn.Module):
@@ -48,7 +26,7 @@ class SPINN(nn.Module):
                 list(torch.split(c_sent, 1, 0))
             )
         ]
-        stack_batch = [Stack() for _ in buffer_batch]
+        stack_batch = [create_stack(self.args.hidden_size, self.args.continuous_stack) for _ in buffer_batch]
         transitions_batch = [trans.squeeze(1) for trans
             in list(torch.split(transitions, 1, 1))]
 
@@ -62,17 +40,25 @@ class SPINN(nn.Module):
                 act = temp_trans[b_id]
                 act = act.data[0]
 
+                # TODO this will be probability of decision for unsupervised case
+                valence = Variable(torch.FloatTensor([1.0]))
+
                 if act == PAD:
                     continue
 
                 if act == SHIFT:
                     word = buffer_batch[b_id].pop()
-                    stack_batch[b_id].add(word, time_stamp)
+                    stack_batch[b_id].add(word, valence, time_stamp)
 
                 if act == REDUCE:
                     reduce_ids.append(b_id)
-                    r = stack_batch[b_id].pop()
-                    l = stack_batch[b_id].pop()
+
+                    r = stack_batch[b_id].peek()
+                    stack_batch[b_id].pop(valence)
+
+                    l = stack_batch[b_id].peek()
+                    stack_batch[b_id].pop(valence)
+
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
@@ -83,10 +69,10 @@ class SPINN(nn.Module):
                 c_rights = torch.cat(reduce_rc)
                 h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
                 for i, state in enumerate(zip(h_outs, c_outs)):
-                    stack_batch[reduce_ids[i]].add(state)
+                    stack_batch[reduce_ids[i]].add(state, valence)
 
         outputs = []
         for stack in stack_batch:
-            outputs.append(stack.pop()[0])
+            outputs.append(stack.peek()[0])
 
         return torch.cat(outputs)
