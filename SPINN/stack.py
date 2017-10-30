@@ -47,6 +47,9 @@ class DefaultStack(BaseStack):
         top = self.states[-1]
         return top
 
+    def size(self):
+        return len(self.states)
+
 class ContinuousStack(BaseStack):
     def __init__(self, dim):
         self.dim = dim

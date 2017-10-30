@@ -13,7 +13,8 @@ class Reduce(nn.Module):
 
     def lstm(self, input, cl, cr):
         (i, fl, fr, o, g) = torch.chunk(input, 5, 1)
-        c = torch.mul(cl, self.sigmoid(fl)) + torch.mul(cr, nn.Sigmoid()(fr)) + torch.mul(self.sigmoid(i), self.tanh(g))
+        c = torch.mul(cl, self.sigmoid(fl)) + torch.mul(cr, self.sigmoid(fr)) + \
+            torch.mul(self.sigmoid(i), self.tanh(g))
         h = torch.mul(o, self.tanh(c))
         return (h, c)
 
