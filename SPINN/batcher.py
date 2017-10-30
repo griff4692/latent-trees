@@ -16,11 +16,11 @@ def prepare_snli_batches(args):
     debug_validation = 'mini_dev.jsonl'
     debug_test = 'mini_test.jsonl'
 
-    if not os.path.exists(os.path.join(data_dir, train_path)):
+    if not os.path.exists(os.path.join(data_dir, "snli_1.0_" + train_path)):
         remove_train_unk()
 
     if args.debug:
-        if not os.path.exists(os.path.join(data_dir, debug_train)):
+        if not os.path.exists(os.path.join(data_dir, "snli_1.0_" + debug_train)):
             gen_mini()
 
         print "Using first %d examples for development purposes..." % MINI_SIZE
