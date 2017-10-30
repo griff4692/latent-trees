@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Variable
 import numpy as np
 from random import random
-import abc
+import abc, six
 from abc import ABCMeta
 
 
@@ -12,8 +12,8 @@ def create_stack(dim, use_continuous=False):
     else:
         return DefaultStack(dim)
 
+@six.add_metaclass(ABCMeta)
 class BaseStack:
-    __metaclass__ = ABCMeta
 
     def __init_(self):
         pass
@@ -71,7 +71,7 @@ class ContinuousStack(BaseStack):
         size = self.size()
 
         if size == 0:
-            print "Warning!  Empty stack..."
+            print ("Warning!  Empty stack...")
             return None
 
         if flavor == 'peek':
@@ -126,24 +126,24 @@ if __name__=='__main__':
     s = Stack(dim)
 
     vec = rand_vec(dim)
-    print "Adding %.2f with strength %.2f" % (vec, 0.5)
+    print ("Adding %.2f with strength %.2f" % (vec, 0.5))
     s.add(vec, 0.5)
-    print "Read is %.2f" % s.peek()[0]
+    print ("Read is %.2f" % s.peek()[0])
 
     vec = rand_vec(dim)
-    print "Adding %.2f with strength %.2f" % (vec, 0.5)
+    print ("Adding %.2f with strength %.2f" % (vec, 0.5))
     s.add(vec, 0.5)
-    print "Read is %.2f" % s.peek()[0]
+    print ("Read is %.2f" % s.peek()[0])
 
-    print "Popping 0.8"
+    print ("Popping 0.8")
     s.pop(0.8)
-    print "Read is %.2f" % s.peek()[0]
+    print ("Read is %.2f" % s.peek()[0])
 
     vec = rand_vec(dim)
-    print "Adding %.2f with strength %.2f" % (vec, 0.9)
+    print ("Adding %.2f with strength %.2f" % (vec, 0.9))
     s.add(vec, 0.9)
-    print "Read is %.2f" % s.peek()[0]
+    print ("Read is %.2f" % s.peek()[0])
 
-    print "Popping 0.5"
+    print ("Popping 0.5")
     s.pop(0.5)
-    print "Read is %.2f" % s.peek()[0]
+    print ("Read is %.2f" % s.peek()[0])

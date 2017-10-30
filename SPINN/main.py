@@ -4,6 +4,7 @@ from snli_classifier import SNLIClassifier
 from batcher import prepare_snli_batches
 import numpy as np
 import argparse
+import sys
 from utils import render_args
 
 def predict(model, sent1, sent2):
@@ -31,7 +32,8 @@ def train(args):
     model = SNLIClassifier(args, len(inputs.vocab.stoi))
     model.set_weight(inputs.vocab.vectors.numpy())
     print ("Instantiated Model...")
-    if args.cuda:
+    sys.stdout.flush()
+    if args.gpu:
         model.cuda()
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
@@ -79,20 +81,21 @@ def train(args):
 
                     total += dev_batch.batch_size
                 correct = np.trace(confusion_matrix)
-                print "Accuracy is %.2f" % (float(correct) / total)
+                print ("Accuracy is %.2f" % (float(correct) / total))
                 true_label_counts = confusion_matrix.sum(axis=1)
-                print "Confusion matrix (x-axis is true labels)\n"
+                print ("Confusion matrix (x-axis is true labels)\n")
                 label_names = [n[0:6] + '.' for n in label_names]
-                print "\t\t" + "\t".join(label_names) + "\n"
+                print ("\t\t" + "\t".join(label_names) + "\n")
                 for i in range(num_labels):
-                    print label_names[i],
+                    print (label_names[i],)
                     for j in range(num_labels):
                         if true_label_counts[i] == 0:
                             perc = 0.0
                         else:
                             perc = confusion_matrix[i, j] / true_label_counts[i]
-                        print "\t%.2f%%" % (perc * 100),
-                    print "\t(%d examples)\n" % true_label_counts[i]
+                        print ("\t%.2f%%" % (perc * 100),)
+                    print ("\t(%d examples)\n" % true_label_counts[i])
+                sys.stdout.flush()
         print ("Cost for Epoch ", cost)
 
 if __name__=='__main__':

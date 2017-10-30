@@ -23,7 +23,7 @@ def prepare_snli_batches(args):
         if not os.path.exists(os.path.join(data_dir, "snli_1.0_" + debug_train)):
             gen_mini()
 
-        print "Using first %d examples for development purposes..." % MINI_SIZE
+        print ("Using first %d examples for development purposes..." % MINI_SIZE)
         train, dev, test = datasets.SNLI.splits(inputs, answers, transitions,
             train=debug_train, validation=debug_validation, test=debug_test)
     else:
