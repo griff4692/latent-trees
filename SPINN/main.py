@@ -78,15 +78,12 @@ def train(args):
                 correct = np.trace(confusion_matrix)
                 print "Accuracy is %.2f" % (float(correct) / total)
                 true_label_counts = confusion_matrix.sum(axis=1)
-                print "Confusion matrix (x-axis is true labels)"
-                print "\t\t" + "\t".join(label_names)
+                print "Confusion matrix (x-axis is true labels)\n"
+                label_names = [n[0:6] + '.' for n in label_names]
+                print "\t\t" + "\t".join(label_names) + "\n"
                 for i in range(4):
-                    if i == 0:
-                        print "\t",
                     print label_names[i],
                     for j in range(4):
-                        if j == 2 or j == 3:
-                            print "\t",
                         if true_label_counts[i] == 0:
                             perc = 0.0
                         else:
