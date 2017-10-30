@@ -107,6 +107,7 @@ if __name__=='__main__':
     parser.add_argument('--snli_num_h_layers', type=int, default=1, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate', type=float, default=0.5)
+    parser.add_argument('-no_batch_norm', action='store_true', default=False)
 
     args = parser.parse_args()
     render_args(args)

@@ -11,10 +11,10 @@ def prepare_snli_batches(args):
     answers = data.Field(sequential=False)
     data_dir = '.data/snli/snli_1.0/'
 
-    train_path = 'clean_train.jsonl'
-    debug_train = 'mini_clean_train.jsonl'
-    debug_validation = 'mini_dev.jsonl'
-    debug_test = 'mini_test.jsonl'
+    train_path = 'snli_1.0_clean_train.jsonl'
+    debug_train = 'snli_1.0_mini_clean_train.jsonl'
+    debug_validation = 'snli_1.0_mini_dev.jsonl'
+    debug_test = 'snli_1.0_mini_test.jsonl'
 
     if not os.path.exists(os.path.join(data_dir, "snli_1.0_" + train_path)):
         remove_train_unk()
