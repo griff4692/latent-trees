@@ -3,7 +3,7 @@ from torchtext import data
 import torchtext.vocab as vocab
 import os
 
-from gen_mini_splits import gen_mini
+from gen_mini_splits import gen_mini, MINI_SIZE
 
 def prepare_snli_batches(args):
     inputs = datasets.snli.ParsedTextField(lower=True)
@@ -18,6 +18,7 @@ def prepare_snli_batches(args):
         if not os.path.exists(debug_train):
             gen_mini()
 
+        print "Using first %d examples for development purposes..." % MINI_SIZE
         train, dev, test = datasets.SNLI.splits(inputs, answers, transitions,
             train=debug_train, validation=debug_validation, test=debug_test)
     else:
