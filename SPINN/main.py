@@ -31,7 +31,8 @@ def train(args):
     model = SNLIClassifier(args, len(inputs.vocab.stoi))
     model.set_weight(inputs.vocab.vectors.numpy())
     print ("Instantiated Model...")
-
+    if args.cuda:
+        model.cuda()
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
     count_iter = 0
@@ -108,6 +109,7 @@ if __name__=='__main__':
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate', type=float, default=0.5)
     parser.add_argument('-no_batch_norm', action='store_true', default=False)
+    parser.add_argument('-gpu', action='store_true', default=False)
 
     args = parser.parse_args()
     render_args(args)
