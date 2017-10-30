@@ -64,7 +64,7 @@ class ContinuousStack(BaseStack):
             self.cs = torch.cat([self.cs, state[1]], 0)
 
 
-    def extract(self, flavor, mass_remaining):
+    def reduce(self, flavor, mass_remaining):
         size = self.size()
 
         if size == 0:
@@ -99,7 +99,7 @@ class ContinuousStack(BaseStack):
 
     def peek(self):
         valence = Variable(torch.FloatTensor([1.0]))
-        return self.extract('peek', valence)
+        return self.reduce('peek', valence)
 
     def size(self):
         if self.valences is None:
@@ -108,7 +108,7 @@ class ContinuousStack(BaseStack):
         return self.valences.size()[0]
 
     def pop(self, valence):
-        self.extract('pop', valence)
+        self.reduce('pop', valence)
 
 
 # register all subclasses to base class

@@ -1,13 +1,28 @@
 from torchtext import datasets
 from torchtext import data
 import torchtext.vocab as vocab
+import os
+
+from gen_mini_splits import gen_mini
 
 def prepare_snli_batches(args):
     inputs = datasets.snli.ParsedTextField(lower=True)
     transitions = datasets.snli.ShiftReduceField()
     answers = data.Field(sequential=False)
 
-    train, dev, test = datasets.SNLI.splits(inputs, answers, transitions)
+    debug_train = 'snli_1.0_mini_train.jsonl'
+    debug_validation = 'snli_1.0_mini_dev.jsonl'
+    debug_test = 'snli_1.0_mini_test.jsonl'
+
+    if args.debug:
+        if not os.path.exists(debug_train):
+            gen_mini()
+
+        train, dev, test = datasets.SNLI.splits(inputs, answers, transitions,
+            train=debug_train, validation=debug_validation, test=debug_test)
+    else:
+        train, dev, test = datasets.SNLI.splits(inputs, answers, transitions)
+
     inputs.build_vocab(train, dev, test)
     answers.build_vocab(train)
     glove = vocab.GloVe(name='6B', dim=args.embed_dim)

@@ -38,10 +38,12 @@ def train(args):
         cost = 0
         for batch_idx, batch in enumerate(train_iter):
             count_iter += batch.batch_size
-            cost += train_batch(model, loss, optimizer,
-                            (batch.hypothesis.transpose(0, 1), batch.hypothesis_transitions.t()),
-                            (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
-                            batch.label)
+            cost += train_batch(
+                model, loss, optimizer,
+                (batch.hypothesis.transpose(0, 1), batch.hypothesis_transitions.t()),
+                (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
+                batch.label
+            )
 
             if count_iter >= args.eval_freq:
                 correct, total = 0.0, 0.0
@@ -102,6 +104,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=10, help='number of epochs between evaluation on dev set.')
+    parser.add_argument('-debug', action='store_true', default=False)
 
     args = parser.parse_args()
     render_args(args)
