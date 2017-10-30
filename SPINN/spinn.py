@@ -41,14 +41,15 @@ class SPINN(nn.Module):
             in list(torch.split(transitions, 1, 1))]
 
         batch_size = len(buffer_batch)
+
         for time_stamp in range(len(transitions_batch)):
             reduce_ids = []
             reduce_lh, reduce_lc = [], []
             reduce_rh, reduce_rc = [], []
-            temp_trans = transitions_batch[time_stamp]
+            temp_trans = transitions_batch[time_stamp].data
+
             for b_id in range(batch_size):
                 act = temp_trans[b_id]
-                act = act.data[0]
 
                 # TODO this will be probability of decision for unsupervised case
                 valence = Variable(torch.FloatTensor([1.0]))

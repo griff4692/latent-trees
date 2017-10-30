@@ -9,7 +9,7 @@ def prepare_snli_batches(args):
     inputs = datasets.snli.ParsedTextField(lower=True)
     transitions = datasets.snli.ShiftReduceField()
     answers = data.Field(sequential=False)
-    data_dir = '.data/snli/snli_1.0'
+    data_dir = '.data/snli/snli_1.0/'
 
     train_path = 'snli_1.0_clean_train.jsonl'
     debug_train = 'snli_1.0_mini_clean_train.jsonl'
