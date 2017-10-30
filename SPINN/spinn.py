@@ -14,6 +14,7 @@ class SPINN(nn.Module):
         self.args = args
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate)
+        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
 
         self.word = nn.Linear(self.args.embed_dim, 2 * self.args.hidden_size)
         if not transitions:
@@ -21,13 +22,15 @@ class SPINN(nn.Module):
         self.reduce = Reduce(self.args.hidden_size)
 
     def forward(self, sentence, transitions):
-        sent_len = sentence.size()[1]
+        batch_size, sent_len, _  = sentence.size()
 
         out = self.word(sentence) # batch, |sent|, h * 2
-        
+
         # batch normalization and dropout
         if not self.args.no_batch_norm:
-            out = nn.BatchNorm1d(sent_len)(out) # batch, |sent|, h * 2
+            out = out.transpose(1, 2)
+            out = self.batch_norm1(out) # batch * |sent|, h * 2
+            out = out.transpose(1, 2)
 
         if self.args.dropout_rate > 0:
             out = self.dropout(out) # batch, |sent|, h * 2
@@ -39,6 +42,7 @@ class SPINN(nn.Module):
                 list(torch.split(c_sent, 1, 0))
             )
         ]
+
         stack_batch = [create_stack(self.args.hidden_size, self.args.continuous_stack) for _ in buffer_batch]
         transitions_batch = [trans.squeeze(1) for trans
             in list(torch.split(transitions, 1, 1))]
