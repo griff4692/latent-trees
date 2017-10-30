@@ -19,14 +19,16 @@ class SPINN(nn.Module):
         if not transitions:
             self.track = nn.Linear(self.args.hidden_size, 2)
         self.reduce = Reduce(self.args.hidden_size)
+        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
 
     def forward(self, sentence, transitions):
         sent_len = sentence.size()[1]
 
         out = self.word(sentence) # batch, |sent|, h * 2
         # batch normalization and dropout
-        out = nn.BatchNorm1d(sent_len)(out) # batch, |sent|, h * 2
-
+        out = out.transpose(1, 2)
+        out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
+        out = out.transpose(1, 2)
         out = self.dropout(out) # batch, |sent|, h * 2
 
         (h_sent, c_sent) = torch.chunk(out, 2, 2)  # ((batch, |sent|, h), (batch, |sent|, h))
