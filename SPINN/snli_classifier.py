@@ -44,18 +44,23 @@ class SNLIClassifier(nn.Module):
         prem_encode = self.encoder(prem_embed, premise[1])
 
         features = self.prepare_features(hyp_encode, prem_encode)
-        features = self.batch_norm_mlp_input(features)
-        features = self.dropout(features)
+
+        if not self.args.no_batch_norm:
+            features = self.batch_norm_mlp_input(features)
+
+        if self.args.dropout_rate > 0:
+            features = self.dropout(features)
 
         for (i, layer) in enumerate(self.mlp):
             # ReLu plus weight matrix
             features = self.relu(layer(features))
 
             # batch norm
-            features = self.batch_norm_mlp_hidden(features)
+            if not self.args.no_batch_norm:
+                features = self.batch_norm_mlp_hidden(features)
 
             # dropout
-            features = self.dropout(features)
-
+            if self.args.dropout_rate > 0:
+                features = self.dropout(features)
 
         return self.softmax(self.output(features))

@@ -24,10 +24,13 @@ class SPINN(nn.Module):
         sent_len = sentence.size()[1]
 
         out = self.word(sentence) # batch, |sent|, h * 2
+        
         # batch normalization and dropout
-        out = nn.BatchNorm1d(sent_len)(out) # batch, |sent|, h * 2
+        if not self.args.no_batch_norm:
+            out = nn.BatchNorm1d(sent_len)(out) # batch, |sent|, h * 2
 
-        out = self.dropout(out) # batch, |sent|, h * 2
+        if self.args.dropout_rate > 0:
+            out = self.dropout(out) # batch, |sent|, h * 2
 
         (h_sent, c_sent) = torch.chunk(out, 2, 2)  # ((batch, |sent|, h), (batch, |sent|, h))
         buffer_batch = [Buffer(h_s, c_s) for h_s, c_s
