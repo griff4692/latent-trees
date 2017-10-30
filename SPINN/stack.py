@@ -5,6 +5,8 @@ from random import random
 import abc
 from abc import ABCMeta
 
+def zero_state(dim):
+    return (Variable(torch.zeros(1, dim)), Variable(torch.zeros(1, dim)))
 
 def create_stack(dim, use_continuous=False):
     if use_continuous:
@@ -30,6 +32,10 @@ class BaseStack:
     def peek(self):
         pass
 
+    @abc.abstractmethod
+    def peek_two(self):
+        pass
+
 class DefaultStack(BaseStack):
     # Figure out Thin Stack.
     # Seems like an overhead at this stage.
@@ -44,8 +50,21 @@ class DefaultStack(BaseStack):
         self.states.pop()
 
     def peek(self):
+        if self.size() == 0:
+            return zero_state(self.dim)
         top = self.states[-1]
         return top
+
+    def peek_two(self):
+        if self.size() == 0:
+            return zero_state(self.dim), zero_state(self.dim)
+        if self.size() == 1:
+            return self.states[-1], zero_state(self.dim),
+
+        return self.states[-1], self.states[-2]
+
+        second_top = self.states[-2]
+        return second_top
 
     def size(self):
         return len(self.states)
@@ -69,10 +88,7 @@ class ContinuousStack(BaseStack):
 
     def reduce(self, flavor, mass_remaining):
         size = self.size()
-
-        if size == 0:
-            print "Warning!  Empty stack..."
-            return None
+        coeff = 1.0 if flavor == 'restore' else -1.0
 
         if flavor == 'peek':
             # don't overwrite
@@ -87,7 +103,7 @@ class ContinuousStack(BaseStack):
             if flavor == 'peek':
                 read_mask[idx] = mass_coeff
             else:
-                self.valences[idx] = self.valences[idx] - mass_coeff
+                self.valences[idx] = self.valences[idx] + (coeff * mass_coeff)
 
             mass_remaining -= mass_coeff
             idx -= 1
@@ -104,6 +120,21 @@ class ContinuousStack(BaseStack):
         valence = Variable(torch.FloatTensor([1.0]))
         return self.reduce('peek', valence)
 
+    def peek_two(self):
+        if self.hs is None:
+            return zero_state(self.dim), zero_state(self.dim)
+
+        valence = Variable(torch.FloatTensor([1.0]))
+        top1 = self.reduce('peek', valence)
+
+        # temporarily reduce mass
+        self.reduce('pop', valence)
+        top2 = self.reduce('pop', valence)
+        # restore mass you temporarily took off
+        self.reduce('restore', valence)
+
+        return top1, top2
+
     def size(self):
         if self.valences is None:
             return 0
@@ -112,6 +143,9 @@ class ContinuousStack(BaseStack):
 
     def pop(self, valence):
         self.reduce('pop', valence)
+
+    def restore(self, valence):
+        self.reduce('restore', valence)
 
 
 # register all subclasses to base class
@@ -126,24 +160,24 @@ if __name__=='__main__':
     s = Stack(dim)
 
     vec = rand_vec(dim)
-    print "Adding %.2f with strength %.2f" % (vec, 0.5)
+    print("Adding %.2f with strength %.2f" % (vec, 0.5))
     s.add(vec, 0.5)
-    print "Read is %.2f" % s.peek()[0]
+    print("Read is %.2f" % s.peek()[0])
 
     vec = rand_vec(dim)
-    print "Adding %.2f with strength %.2f" % (vec, 0.5)
+    print("Adding %.2f with strength %.2f" % (vec, 0.5))
     s.add(vec, 0.5)
-    print "Read is %.2f" % s.peek()[0]
+    print("Read is %.2f" % s.peek()[0])
 
-    print "Popping 0.8"
+    print("Popping 0.8")
     s.pop(0.8)
-    print "Read is %.2f" % s.peek()[0]
+    print("Read is %.2f" % s.peek()[0])
 
     vec = rand_vec(dim)
-    print "Adding %.2f with strength %.2f" % (vec, 0.9)
+    print("Adding %.2f with strength %.2f" % (vec, 0.9))
     s.add(vec, 0.9)
-    print "Read is %.2f" % s.peek()[0]
+    print("Read is %.2f" % s.peek()[0])
 
-    print "Popping 0.5"
+    print("Popping 0.5")
     s.pop(0.5)
-    print "Read is %.2f" % s.peek()[0]
+    print("Read is %.2f" % s.peek()[0])
