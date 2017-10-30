@@ -20,6 +20,7 @@ class SPINN(nn.Module):
         if not transitions:
             self.track = nn.Linear(self.args.hidden_size, 2)
         self.reduce = Reduce(self.args.hidden_size)
+        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
 
     def forward(self, sentence, transitions):
         batch_size, sent_len, _  = sentence.size()
@@ -27,9 +28,10 @@ class SPINN(nn.Module):
         out = self.word(sentence) # batch, |sent|, h * 2
 
         # batch normalization and dropout
+
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2)
-            out = self.batch_norm1(out) # batch * |sent|, h * 2
+            out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
             out = out.transpose(1, 2)
 
         if self.args.dropout_rate > 0:
