@@ -9,12 +9,12 @@ def prepare_snli_batches(args):
     inputs = datasets.snli.ParsedTextField(lower=True)
     transitions = datasets.snli.ShiftReduceField()
     answers = data.Field(sequential=False)
-    data_dir = '.data/snli/snli_1.0'
+    data_dir = '.data/snli/snli_1.0/'
 
-    train_path = 'snli_1.0_clean_train.jsonl'
-    debug_train = 'snli_1.0_mini_clean_train.jsonl'
-    debug_validation = 'snli_1.0_mini_dev.jsonl'
-    debug_test = 'snli_1.0_mini_test.jsonl'
+    train_path = 'clean_train.jsonl'
+    debug_train = 'mini_clean_train.jsonl'
+    debug_validation = 'mini_dev.jsonl'
+    debug_test = 'mini_test.jsonl'
 
     if not os.path.exists(os.path.join(data_dir, train_path)):
         remove_train_unk()
@@ -27,6 +27,7 @@ def prepare_snli_batches(args):
         train, dev, test = datasets.SNLI.splits(inputs, answers, transitions,
             train=debug_train, validation=debug_validation, test=debug_test)
     else:
+        print ("Train Path ", train_path)
         train, dev, test = datasets.SNLI.splits(inputs, answers, transitions, train=train_path)
 
     inputs.build_vocab(train, dev, test)
