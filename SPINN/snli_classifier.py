@@ -20,7 +20,11 @@ class SNLIClassifier(nn.Module):
         for i in range(self.args.snli_num_h_layers):
             input_dim = 4 * self.args.hidden_size if i == 0 else self.args.snli_h_dim
             out_dim = self.args.snli_h_dim
-            self.mlp.append(nn.Linear(input_dim, out_dim))
+            if args.gpu:
+                
+                self.mlp.append(nn.Linear(input_dim, out_dim).cuda())
+            else:
+                self.mlp.append(nn.Linear(input_dim, out_dim))
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
         self.encoder = SPINN(self.args)

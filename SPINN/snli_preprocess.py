@@ -49,7 +49,7 @@ def remove_train_unk():
 
         dest_fd.write(pt)
 
-    print "Removed Unk gold labels: shrunk dataset from %d to %d" % (orig_data_size, orig_data_size - removed)
+    print ("Removed Unk gold labels: shrunk dataset from %d to %d" % (orig_data_size, orig_data_size - removed))
 
 if __name__ =='__main__':
     parser = argparse.ArgumentParser(description='Preprocess arguments.')

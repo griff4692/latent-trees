@@ -30,7 +30,7 @@ class SPINN(nn.Module):
         # batch normalization and dropout
 
         if not self.args.no_batch_norm:
-            out = out.transpose(1, 2)
+            out = out.transpose(1, 2).contiguous()
             out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
             out = out.transpose(1, 2)
 
@@ -38,10 +38,10 @@ class SPINN(nn.Module):
             out = self.dropout(out) # batch, |sent|, h * 2
 
         (h_sent, c_sent) = torch.chunk(out, 2, 2)  # ((batch, |sent|, h), (batch, |sent|, h))
-        buffer_batch = [Buffer(h_s, c_s) for h_s, c_s
-            in zip(
+        buffer_batch = [Buffer(h_s, c_s) for (h_s, c_s)
+            in list(zip(
                 list(torch.split(h_sent, 1, 0)),
-                list(torch.split(c_sent, 1, 0))
+                list(torch.split(c_sent, 1, 0)))
             )
         ]
 
