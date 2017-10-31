@@ -2,6 +2,7 @@ from torchtext import datasets
 from torchtext import data
 import torchtext.vocab as vocab
 import os
+import sys 
 
 from snli_preprocess import gen_mini, remove_train_unk, MINI_SIZE
 
@@ -16,11 +17,10 @@ def prepare_snli_batches(args):
     debug_validation = 'snli_1.0_mini_dev.jsonl'
     debug_test = 'snli_1.0_mini_test.jsonl'
 
-    if not os.path.exists(os.path.join(data_dir, "snli_1.0_" + train_path)):
+    if not os.path.exists(os.path.join(data_dir, train_path)):
         remove_train_unk()
-
     if args.debug:
-        if not os.path.exists(os.path.join(data_dir, "snli_1.0_" + debug_train)):
+        if not os.path.exists(os.path.join(data_dir, debug_train)):
             gen_mini()
 
         print ("Using first %d examples for development purposes..." % MINI_SIZE)
@@ -35,5 +35,5 @@ def prepare_snli_batches(args):
     glove = vocab.GloVe(name='6B', dim=args.embed_dim)
     inputs.vocab.set_vectors(stoi=glove.stoi, vectors=glove.vectors,dim=args.embed_dim)
     train_iter, dev_iter, test_iter = data.BucketIterator.splits(
-        (train, dev, test), batch_size=args.batch_size, device=-1)
+        (train, dev, test), batch_size=args.batch_size, device=0)
     return answers.vocab.itos, (train_iter, dev_iter, test_iter, inputs)
