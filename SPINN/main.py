@@ -45,7 +45,7 @@ def train(args):
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
     count_iter = 0
-
+    train_iter.repeat = False
     for epoch in range(args.epochs):
         train_iter.init_epoch()
         cost = 0
