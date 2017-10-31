@@ -98,14 +98,8 @@ class SPINN(nn.Module):
 
             if self.args.tracking:
                 valences = self.update_tracker(buffer_batch, stack_batch, batch_size)
-
-                # soft actions
-                if self.args.continuous_stack:
-                    temp_trans = valences # transitions are soft
-                else:
-                    # transitions are hard (shifted to 2,3)
-                    _, temp_trans = valences.max(dim=1)
-                    temp_trans = temp_trans.data.numpy() + 2
+                _, temp_trans = valences.max(dim=1)
+                temp_trans = temp_trans.data.numpy() + 2
             else:
                 valences = None
                 temp_trans = transitions_batch[time_stamp].data
@@ -125,7 +119,7 @@ class SPINN(nn.Module):
                     continue
 
                 # 2 - REDUCE
-                if act == REDUCE or (time_stamp >= 2 and self.args.continuous_stack):
+                if act == REDUCE or (self.args.continuous_stack and stack_batch[b_id].size() >= 2):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
@@ -138,7 +132,7 @@ class SPINN(nn.Module):
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
                 # 3 - SHIFT
-                if act == SHIFT or self.args.continuous_stack:
+                if act == SHIFT or (self.args.continuous_stack and buffer_batch[b_id].size() > 0):
                     word = buffer_batch[b_id].pop()
                     stack_batch[b_id].add(word, valence[1], time_stamp)
 
@@ -149,7 +143,7 @@ class SPINN(nn.Module):
                 c_rights = torch.cat(reduce_rc)
                 h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
                 for i, state in enumerate(zip(h_outs, c_outs)):
-                    stack_batch[reduce_ids[i]].add(state, valence)
+                    stack_batch[reduce_ids[i]].add(state, valence[0])
 
         outputs = []
         for stack in stack_batch:

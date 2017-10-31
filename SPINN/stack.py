@@ -37,8 +37,7 @@ class BaseStack:
         pass
 
 class DefaultStack(BaseStack):
-    # Figure out Thin Stack.
-    # Seems like an overhead at this stage.
+    # TODO Figure out Thin Stack.
     def __init__(self, dim):
         self.states = []
         self.dim = dim
@@ -81,10 +80,13 @@ class ContinuousStack(BaseStack):
             self.valences = valence
             self.hs, self.cs = state
         else:
+            if not valence.size()[0] == 1:
+                print valence.size()
+                raise Exception("Adding more than one valence at a time.")
+
             self.valences = torch.cat([self.valences, valence], 0)
             self.hs = torch.cat([self.hs, state[0]], 0)
             self.cs = torch.cat([self.cs, state[1]], 0)
-
 
     def reduce(self, flavor, mass_remaining):
         size = self.size()
@@ -92,24 +94,22 @@ class ContinuousStack(BaseStack):
 
         if flavor == 'peek':
             # don't overwrite
-            read_mask = Variable(torch.FloatTensor(size,).zero_())
+            read_mask = Variable(torch.FloatTensor(size,1).zero_())
 
         # top of the stack
         idx = size - 1
-        while mass_remaining.data[0] > 0.0 and idx >=0:
-            mass_coeff = torch.min(self.valences[idx],
-                mass_remaining)
+        while mass_remaining > 0.0 and idx >=0:
+            mass_coeff = min(self.valences[idx].data[0], mass_remaining)
 
             if flavor == 'peek':
                 read_mask[idx] = mass_coeff
             else:
-                self.valences[idx] = self.valences[idx] + (coeff * mass_coeff)
+                self.valences[idx].data += (coeff * mass_coeff)
 
             mass_remaining -= mass_coeff
             idx -= 1
 
         if flavor == 'peek':
-            read_mask = read_mask.view(size, 1)
             reduced_hs = torch.mul(read_mask, self.hs).sum(0, keepdim=True)
             reduced_cs = torch.mul(read_mask, self.cs).sum(0, keepdim=True)
 
@@ -117,21 +117,19 @@ class ContinuousStack(BaseStack):
 
 
     def peek(self):
-        valence = Variable(torch.FloatTensor([1.0]))
-        return self.reduce('peek', valence)
+        return self.reduce('peek', 1.0)
 
     def peek_two(self):
         if self.hs is None:
             return zero_state(self.dim), zero_state(self.dim)
 
-        valence = Variable(torch.FloatTensor([1.0]))
-        top1 = self.reduce('peek', valence)
+        top1 = self.reduce('peek', 1.0)
 
         # temporarily reduce mass
-        self.reduce('pop', valence)
-        top2 = self.reduce('pop', valence)
+        self.reduce('pop', 1.0)
+        top2 = self.reduce('peek', 1.0)
         # restore mass you temporarily took off
-        self.reduce('restore', valence)
+        self.reduce('restore', 1.0)
 
         return top1, top2
 
@@ -142,7 +140,7 @@ class ContinuousStack(BaseStack):
         return self.valences.size()[0]
 
     def pop(self, valence):
-        self.reduce('pop', valence)
+        self.reduce('pop', valence.data[0])
 
     def restore(self, valence):
         self.reduce('restore', valence)
