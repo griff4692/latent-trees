@@ -76,7 +76,7 @@ class SPINN(nn.Module):
         buffer_batch = [Buffer(h_s, c_s, self.args) for h_s, c_s
             in zip(
                 list(torch.split(h_sent, 1, 0)),
-                list(torch.split(c_sent, 1, 0)))
+                list(torch.split(c_sent, 1, 0))
             )
         ]
 

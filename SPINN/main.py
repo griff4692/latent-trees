@@ -8,10 +8,10 @@ import argparse
 import sys
 from utils import render_args
 
-def predict(model, sent1, sent2, cuda=False):
+def predict(model, sent1, sent2, cuda=-1):
     model.eval()
     output = model(sent1, sent2)
-    if cuda:
+    if cuda > -1:
         return output.data.cpu().numpy().argmax(axis=1)
     return output.data.numpy().argmax(axis=1)
 
@@ -29,18 +29,18 @@ def train_batch(model, loss, optimizer, sent1, sent2, y_val):
     return output.data[0]
 
 def train(args):
-    print ("Starting...")
+    print("Starting...")
     sys.stdout.flush()
     label_names, (train_iter, dev_iter, test_iter, inputs) = prepare_snli_batches(args)
     label_names = label_names[1:] # don't count UNK
     num_labels = len(label_names)
-    print ("Prepared Dataset...")
+    print("Prepared Dataset...")
     sys.stdout.flush()
     model = SNLIClassifier(args, len(inputs.vocab.stoi))
     model.set_weight(inputs.vocab.vectors.numpy())
-    print ("Instantiated Model...")
+    print("Instantiated Model...")
     sys.stdout.flush()
-    if args.gpu:
+    if args.gpu > -1:
         model.cuda()
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
@@ -73,7 +73,7 @@ def train(args):
                         (dev_batch.premise.transpose(0, 1),
                             dev_batch.premise_transitions.t()), args.gpu
                     )
-                    if args.gpu:
+                    if args.gpu > -1:
                         true_labels =  dev_batch.label.data.cpu().numpy() - 1.0
                     else:
                         true_labels =  dev_batch.label.data.numpy() - 1.0
@@ -91,11 +91,11 @@ def train(args):
 
                     total += dev_batch.batch_size
                 correct = np.trace(confusion_matrix)
-                print ("Accuracy is %.4f, batch %f, epoch %f" % (float(correct) / total, batch_idx, epoch))
+                print("Accuracy is %.4f, batch %f, epoch %f" % (float(correct) / total, batch_idx, epoch))
                 true_label_counts = confusion_matrix.sum(axis=1)
-                print ("Confusion matrix (x-axis is true labels)\n")
+                print("Confusion matrix (x-axis is true labels)\n")
                 label_names = [n[0:6] + '.' for n in label_names]
-                print ("\t\t" + "\t".join(label_names) + "\n")
+                print("\t\t" + "\t".join(label_names) + "\n")
                 for i in range(num_labels):
                     print (label_names[i], end="")
                     for j in range(num_labels):
@@ -103,8 +103,8 @@ def train(args):
                             perc = 0.0
                         else:
                             perc = confusion_matrix[i, j] / true_label_counts[i]
-                        print ("\t%.2f%%" % (perc * 100), end="")
-                    print ("\t(%d examples)\n" % true_label_counts[i])
+                        print("\t%.2f%%" % (perc * 100), end="")
+                    print("\t(%d examples)\n" % true_label_counts[i])
                 sys.stdout.flush()
 
         print ("Cost for Epoch ", cost)
@@ -117,14 +117,14 @@ if __name__=='__main__':
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
-    parser.add_argument('--eval_freq', type=int, default=25000, help='number of examples between evaluation on dev set.')
+    parser.add_argument('--eval_freq', type=int, default=25, help='Number of examples between evaluation on dev set.')
     parser.add_argument('-debug', action='store_true', default=False)
-    parser.add_argument('--snli_num_h_layers', type=int, default=1, help='tunable hyperparameter.')
+    parser.add_argument('--snli_num_h_layers', type=int, default=1, help='Tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate', type=float, default=0.1)
     parser.add_argument('-no_batch_norm', action='store_true', default=False)
     parser.add_argument('-tracking', action='store_true', default=False)
-    parser.add_argument('-gpu', action='store_true', default=False)
+    parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
 
     args = parser.parse_args()
     render_args(args)
