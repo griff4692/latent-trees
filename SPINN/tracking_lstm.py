@@ -14,14 +14,15 @@ class TrackingLSTM(nn.Module):
         self.state_weights = nn.Linear(self.args.hidden_size, 4 * self.args.hidden_size, bias=False)
         self.input_weights = nn.Linear(3 * self.args.hidden_size, 4 * self.args.hidden_size)
 
-        self.prediction = nn.Linear(self.args.hidden_size, 2)
+        # 3 actions: 0 (Pad), 1 (Reduce), 2 (Shift)
+        self.prediction = nn.Linear(self.args.hidden_size, 3)
 
 
     def initialize_states(self, batch_size):
         self.h = Variable(torch.zeros(batch_size, self.args.hidden_size))
         self.c = Variable(torch.zeros(batch_size, self.args.hidden_size))
 
-    def lstm(self, inputs):
+    def lstm(self, inputs, predict=True):
         h = self.state_weights(self.h) # batch, 4 * dim
         inputs_transform = self.input_weights(inputs)
         x_plus_h = h + inputs_transform
@@ -32,8 +33,11 @@ class TrackingLSTM(nn.Module):
 
         self.h, self.c = h, c
 
-        return self.softmax(self.prediction(self.h))
+        prediction = None
+        if predict:
+            prediction = self.softmax(self.prediction(self.h))
+        return prediction
 
 
-    def forward(self, input):
-        return self.lstm(input)
+    def forward(self, input, predict=True):
+        return self.lstm(input, predict)

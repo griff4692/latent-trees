@@ -1,4 +1,4 @@
 def render_args(args):
-	print ""
+	print ("")
 	for arg in vars(args):
-		print "%s=%s" % (arg, getattr(args, arg))
+		print ("%s=%s" % (arg, getattr(args, arg)))
