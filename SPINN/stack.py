@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Variable
 import numpy as np
 from random import random
-import abc
+import abc, six
 from abc import ABCMeta
 
 def zero_state(dim):
@@ -14,8 +14,8 @@ def create_stack(dim, use_continuous=False):
     else:
         return DefaultStack(dim)
 
+@six.add_metaclass(ABCMeta)
 class BaseStack:
-    __metaclass__ = ABCMeta
 
     def __init_(self):
         pass

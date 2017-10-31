@@ -7,7 +7,7 @@ class Buffer():
             reversed(list(torch.split(h_s.squeeze(0), 1, 0))),
             reversed(list(torch.split(c_s.squeeze(0), 1, 0)))
         )
-        
+
         self.args = args
 
         self.zero_state = (

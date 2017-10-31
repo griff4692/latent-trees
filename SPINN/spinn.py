@@ -23,6 +23,7 @@ class SPINN(nn.Module):
             self.track = TrackingLSTM(self.args)
 
         self.reduce = Reduce(self.args.hidden_size)
+        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
 
     def update_tracker(self, buffer, stack, batch_size):
         tracking_inputs = None
@@ -62,9 +63,10 @@ class SPINN(nn.Module):
         out = self.word(sentence) # batch, |sent|, h * 2
 
         # batch normalization and dropout
+
         if not self.args.no_batch_norm:
-            out = out.transpose(1, 2)
-            out = self.batch_norm1(out) # batch * |sent|, h * 2
+            out = out.transpose(1, 2).contiguous()
+            out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
             out = out.transpose(1, 2)
 
         if self.args.dropout_rate > 0:
@@ -74,7 +76,7 @@ class SPINN(nn.Module):
         buffer_batch = [Buffer(h_s, c_s, self.args) for h_s, c_s
             in zip(
                 list(torch.split(h_sent, 1, 0)),
-                list(torch.split(c_sent, 1, 0))
+                list(torch.split(c_sent, 1, 0)))
             )
         ]
 
