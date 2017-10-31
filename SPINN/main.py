@@ -45,7 +45,6 @@ def train(args):
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
     count_iter = 0
-
     for epoch in range(args.epochs):
         train_iter.init_epoch()
         cost = 0
@@ -91,11 +90,11 @@ def train(args):
 
                     total += dev_batch.batch_size
                 correct = np.trace(confusion_matrix)
-                print("Accuracy is %.4f, batch %f, epoch %f" % (float(correct) / total, batch_idx, epoch))
+                print("Accuracy=%.2f%%, Epoch=%d, Batch=%d" % (float(correct) / total * 100, epoch, batch_idx))
                 true_label_counts = confusion_matrix.sum(axis=1)
-                print("Confusion matrix (x-axis is true labels)\n")
+                print("\nConfusion matrix (x-axis is true labels)\n")
                 label_names = [n[0:6] + '.' for n in label_names]
-                print("\t\t" + "\t".join(label_names) + "\n")
+                print("\t" + "\t".join(label_names) + "\n")
                 for i in range(num_labels):
                     print (label_names[i], end="")
                     for j in range(num_labels):
@@ -105,6 +104,7 @@ def train(args):
                             perc = confusion_matrix[i, j] / true_label_counts[i]
                         print("\t%.2f%%" % (perc * 100), end="")
                     print("\t(%d examples)\n" % true_label_counts[i])
+                print("")
                 sys.stdout.flush()
 
         print ("Cost for Epoch ", cost)
@@ -117,7 +117,7 @@ if __name__=='__main__':
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
-    parser.add_argument('--eval_freq', type=int, default=25, help='Number of examples between evaluation on dev set.')
+    parser.add_argument('--eval_freq', type=int, default=1e5, help='Number of examples between evaluation on dev set.')
     parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=1, help='Tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')

@@ -38,24 +38,29 @@ class SPINN(nn.Module):
 
         return self.track(tracking_inputs)
 
-    def resolve_action(self, buffer, stack, act, time_stamp):
+    def resolve_action(self, buffer, stack, act, time_stamp, ops_left):
         # 1 - PAD, 2 - REDUCE, 3 - SHIFT
+        # Hard constraints:
+        # 1st 2 actions are shift
+        # Can't pop from an empty buffer
+        # Can't reduce < 2 size stack
+        # --> default action is PAD (give learner another chance)
+        if time_stamp < 2:
+            return SHIFT, True
 
-        # if time_stamp <=2, action should be shift
-        if time_stamp <= 2:
-            return SHIFT
+        # if there's nothing in the buffer
+        if buffer.size() == 0 and act == SHIFT:
+            return PAD, True
 
-        # if there's nothing in the buffer, try a shift
-        if buffer.size() == 0:
-            if stack.size() >= 2:
-                return REDUCE
-            else:
-                return PAD
+        # switch reduce to a PAD if REDUCE is not allowed
+        if stack.size() <= 2 and act == REDUCE:
+            return PAD, True
 
-        if stack.size() <= 2:
-            return SHIFT
+        # don't let stack grow to the point where it will be 2 large to shrink to 1 by the end
+        if stack.size() == ops_left and act == SHIFT:
+            return PAD, True
 
-        return act
+        return act, False
 
     def forward(self, sentence, transitions):
         batch_size, sent_len, _  = sentence.size()
@@ -94,6 +99,9 @@ class SPINN(nn.Module):
             num_transitions = len(transitions_batch)
 
         for time_stamp in range(num_transitions):
+            # how many more operations left - do we need to start to reduce stack size to get to 1
+            ops_left = num_transitions - time_stamp
+
             reduce_ids = []
             reduce_lh, reduce_lc = [], []
             reduce_rh, reduce_rc = [], []
@@ -101,27 +109,39 @@ class SPINN(nn.Module):
             if self.args.tracking:
                 valences = self.update_tracker(buffer_batch, stack_batch, batch_size)
                 _, temp_trans = valences.max(dim=1)
-                temp_trans = temp_trans.data.numpy() + 2
+                temp_trans = temp_trans.data.numpy() + 1
             else:
                 valences = None
                 temp_trans = transitions_batch[time_stamp].data
 
             for b_id in range(batch_size):
-                act = temp_trans[b_id]
+                act = None
+                stack_size = stack_batch[b_id].size()
+                buffer_size = buffer_batch[b_id].size()
 
-                # ensures it's a valid act according to state of buffer, batch, and timestamp
-                if self.args.tracking:
-                    act = self.resolve_action(buffer_batch[b_id], stack_batch[b_id], act, time_stamp)
+                # if stack is longer than number of operations left, we need to reduce
+                if not self.args.continuous_stack and stack_size > ops_left:
+                    act = REDUCE
+                    act_ignored = True
+
+                if act is None:
+                    act = temp_trans[b_id]
+                    # ensures it's a valid act according to state of buffer, batch, and timestamp
+                    if self.args.tracking:
+                        act, act_ignored = self.resolve_action(buffer_batch[b_id],
+                        stack_batch[b_id], act, time_stamp, ops_left)
 
                 # reduce, shift valence
                 valence = valences[b_id] if self.args.tracking else [None, None]
+
+                # print("Act=%d,TimeStep=%d,OpsLeft=%d,StackSize=%d,BufferSize=%d" % (act,time_stamp,ops_left,stack_size,buffer_size))
 
                 # 1 - PAD
                 if act == PAD:
                     continue
 
                 # 2 - REDUCE
-                if act == REDUCE or (self.args.continuous_stack and stack_batch[b_id].size() >= 2):
+                if act == REDUCE or (self.args.continuous_stack and stack_size >= 2):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
@@ -134,7 +154,7 @@ class SPINN(nn.Module):
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
                 # 3 - SHIFT
-                if act == SHIFT or (self.args.continuous_stack and buffer_batch[b_id].size() > 0):
+                if act == SHIFT or (self.args.continuous_stack and buffer_size > 0):
                     word = buffer_batch[b_id].pop()
                     stack_batch[b_id].add(word, valence[1], time_stamp)
 
@@ -150,7 +170,9 @@ class SPINN(nn.Module):
         outputs = []
         for stack in stack_batch:
             if not self.args.continuous_stack:
-                assert stack.size() == 1
+                if not stack.size() == 1:
+                    print("Stack size is %d.  Should be 1" % stack.size())
+                    assert stack.size() == 1
 
             outputs.append(stack.peek()[0])
 
