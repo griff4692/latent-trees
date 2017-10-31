@@ -9,6 +9,7 @@ import sys
 from utils import render_args
 
 def predict(model, sent1, sent2, cuda=False):
+    model.eval()
     output = model(sent1, sent2)
     if cuda:
         return output.data.cpu().numpy().argmax(axis=1)
@@ -49,6 +50,7 @@ def train(args):
         train_iter.init_epoch()
         cost = 0
         for batch_idx, batch in enumerate(train_iter):
+            model.train()
             count_iter += batch.batch_size
             cost += train_batch(
                 model, loss, optimizer,
@@ -89,7 +91,7 @@ def train(args):
 
                     total += dev_batch.batch_size
                 correct = np.trace(confusion_matrix)
-                print ("Accuracy is %.2f" % (float(correct) / total))
+                print ("Accuracy is %.4f, batch %f, epoch %f" % (float(correct) / total, batch_idx, epoch))
                 true_label_counts = confusion_matrix.sum(axis=1)
                 print ("Confusion matrix (x-axis is true labels)\n")
                 label_names = [n[0:6] + '.' for n in label_names]
@@ -104,6 +106,7 @@ def train(args):
                         print ("\t%.2f%%" % (perc * 100), end="")
                     print ("\t(%d examples)\n" % true_label_counts[i])
                 sys.stdout.flush()
+                
         print ("Cost for Epoch ", cost)
 
 if __name__=='__main__':
@@ -118,7 +121,7 @@ if __name__=='__main__':
     parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=1, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
-    parser.add_argument('--dropout_rate', type=float, default=0.5)
+    parser.add_argument('--dropout_rate', type=float, default=0.1)
     parser.add_argument('-no_batch_norm', action='store_true', default=False)
     parser.add_argument('-gpu', action='store_true', default=False)
     args = parser.parse_args()
