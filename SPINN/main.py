@@ -152,7 +152,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=1000, help='Number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=True)
+    parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=2, help='Tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate', type=float, default=0.1)
