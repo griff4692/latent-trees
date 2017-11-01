@@ -13,11 +13,9 @@ def create_stack(dim, use_continuous=False):
 
 @six.add_metaclass(ABCMeta)
 class BaseStack:
-    def __init__(self, dim):
-        self.zero_state = (
-            Variable(torch.zeros(1, dim), requires_grad=False),
-            Variable(torch.zeros(1, dim), requires_grad=False)
-        )
+    def zero_state(self):
+        return Variable(torch.zeros(1, self.dim), requires_grad=False),
+        Variable(torch.zeros(1, self.dim), requires_grad=False)
 
     @abc.abstractmethod
     def add(self, state, valence, id=0):
@@ -38,7 +36,6 @@ class BaseStack:
 class DefaultStack(BaseStack):
     # TODO Figure out Thin Stack.
     def __init__(self, dim):
-        super(DefaultStack, self).__init__(dim)
         self.states = []
         self.dim = dim
 
@@ -57,9 +54,9 @@ class DefaultStack(BaseStack):
 
     def peek_two(self):
         if self.size() == 0:
-            return self.zero_state, self.zero_state
+            return self.zero_state(), self.zero_state()
         if self.size() == 1:
-            return self.states[-1], self.zero_state
+            return self.states[-1], self.zero_state()
 
         return self.states[-1], self.states[-2]
 
@@ -71,13 +68,13 @@ class DefaultStack(BaseStack):
 
 class ContinuousStack(BaseStack):
     def __init__(self, dim):
-        super(ContinuousStack, self).__init__(dim)
         self.dim = dim
         self.valences = None
         self.hs = None
         self.cs = None
-        self.one_valence = Variable(torch.FloatTensor([1]), requires_grad=False)
 
+    def one_valence(self):
+        return Variable(torch.FloatTensor([1]), requires_grad=False)
 
     def add(self, state, valence, id=0):
         if self.valences is None:
@@ -97,17 +94,16 @@ class ContinuousStack(BaseStack):
 
         if flavor == 'peek':
             # don't overwrite
-            read_mask = Variable(torch.FloatTensor(size, 1).zero_())
+            read_mask = Variable(torch.zeros(size, 1))
 
         # top of the stack
         idx = size - 1
-
-        while mass_remaining.data[0] > 0.0 and idx >=0:
+        while mass_remaining.data[0] > 0.0 and idx >= 0:
             mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
             if flavor == 'peek':
-                read_mask[idx] = mass_coeff
+                read_mask[idx] = mass_coeff.clone()
             else:
-                self.valences[idx] = self.valences[idx] + (coeff * mass_coeff)
+                self.valences[idx] = self.valences[idx] + (coeff * mass_coeff.clone())
 
             mass_remaining -= mass_coeff
             idx -= 1
@@ -115,27 +111,25 @@ class ContinuousStack(BaseStack):
         if flavor == 'peek':
             reduced_hs = torch.mul(read_mask, self.hs).sum(0, keepdim=True)
             reduced_cs = torch.mul(read_mask, self.cs).sum(0, keepdim=True)
-
             return reduced_hs, reduced_hs
-
 
     def peek(self):
         if self.size() == 0:
-            return self.zero_state
+            return self.zero_state()
 
-        return self.reduce('peek', self.one_valence)
+        return self.reduce('peek', self.one_valence())
 
     def peek_two(self):
         if self.size() == 0:
-            return self.zero_state, self.zero_state
+            return self.zero_state(), self.zero_state()
 
-        top1 = self.reduce('peek', self.one_valence)
+        top1 = self.reduce('peek', self.one_valence())
 
         # temporarily reduce mass
-        self.reduce('pop', self.one_valence)
-        top2 = self.reduce('peek', self.one_valence)
+        self.reduce('pop', self.one_valence())
+        top2 = self.reduce('peek', self.one_valence())
         # restore mass you temporarily took off
-        self.reduce('restore', self.one_valence)
+        self.reduce('restore', self.one_valence())
 
         return top1, top2
 

@@ -4,8 +4,9 @@ from spinn import SPINN
 
 class SNLIClassifier(nn.Module):
     def __init__(self, args, vocab_size):
-        self.args = args
         super(SNLIClassifier, self).__init__()
+
+        self.args = args
         self.embed = nn.Embedding(vocab_size, self.args.embed_dim)
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
@@ -40,9 +41,18 @@ class SNLIClassifier(nn.Module):
     def forward(self, hypothesis, premise):
         hyp_embed = self.embed(hypothesis[0])
         prem_embed = self.embed(premise[0])
-
-        hyp_encode = self.encoder(hyp_embed, hypothesis[1])
-        prem_encode = self.encoder(prem_embed, premise[1])
+        if not self.args.teacher or not self.training:
+            if self.args.tracking:
+                hyp_encode = self.encoder(hyp_embed)
+                prem_encode = self.encoder(prem_embed)
+            else:
+                hyp_encode = self.encoder(hyp_embed, hypothesis[1])
+                prem_encode = self.encoder(prem_embed, premise[1])
+        else:
+            hyp_encode, hyp_true, hyp_pred = self.encoder(hyp_embed, hypothesis[1])
+            prem_encode, prem_true, prem_pred = self.encoder(prem_embed, premise[1])
+            sent_true = torch.cat([hyp_true, prem_true])
+            sent_pred = torch.cat([hyp_pred, prem_pred])
 
         features = self.prepare_features(hyp_encode, prem_encode)
 
@@ -63,5 +73,8 @@ class SNLIClassifier(nn.Module):
             # dropout
             if self.args.dropout_rate > 0:
                 features = self.dropout(features)
+
+        if self.args.teacher and self.training:
+            return self.softmax(self.output(features)), sent_true, sent_pred
 
         return self.softmax(self.output(features))
