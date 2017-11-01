@@ -54,7 +54,7 @@ class SPINN(nn.Module):
 
         return act, False
 
-    def forward(self, sentence, transitions=None):
+    def forward(self, sentence, transitions=None, loss=None):
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2
 
@@ -93,8 +93,7 @@ class SPINN(nn.Module):
                 in list(torch.split(transitions, 1, 1))]
             num_transitions = len(transitions_batch)
 
-        lstm_actions = []
-        true_states = []
+        lstm_loss = 0
         for time_stamp in range(num_transitions):
             # how many more operations left - do we need to start to reduce stack size to get to 1
             ops_left = num_transitions - time_stamp
@@ -109,11 +108,11 @@ class SPINN(nn.Module):
             if self.args.tracking:
                 valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
                 tracking_states.append(tracking_state)
-                lstm_actions.append(valences)
+
                 _, temp_trans = valences.max(dim=1)
                 if self.training and self.args.teacher:
                     temp_trans = transitions_batch[time_stamp]
-                    true_states.append(temp_trans - 1)
+                    lstm_loss += loss(valences, temp_trans-1)
                     temp_trans = temp_trans.data
                 else:
                     temp_trans = temp_trans.data.numpy() + 1
@@ -185,6 +184,6 @@ class SPINN(nn.Module):
                     assert stack.size() == 1
 
             outputs.append(stack.peek()[0])
-        if len(true_states) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_states), torch.cat(lstm_actions)
+        if self.args.teacher and self.training:
+            return torch.cat(outputs), lstm_loss
         return torch.cat(outputs)

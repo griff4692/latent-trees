@@ -40,7 +40,7 @@ class SNLIClassifier(nn.Module):
         ], dim=1)
 
 
-    def forward(self, hypothesis, premise):
+    def forward(self, hypothesis, premise, loss=None):
         hyp_embed = self.embed(hypothesis[0])
         prem_embed = self.embed(premise[0])
         if not self.args.teacher or not self.training:
@@ -51,10 +51,9 @@ class SNLIClassifier(nn.Module):
                 hyp_encode = self.encoder(hyp_embed, hypothesis[1])
                 prem_encode = self.encoder(prem_embed, premise[1])
         else:
-            hyp_encode, hyp_true, hyp_pred = self.encoder(hyp_embed, hypothesis[1])
-            prem_encode, prem_true, prem_pred = self.encoder(prem_embed, premise[1])
-            sent_true = torch.cat([hyp_true, prem_true])
-            sent_pred = torch.cat([hyp_pred, prem_pred])
+            hyp_encode, hyp_loss = self.encoder(hyp_embed, hypothesis[1], loss=loss)
+            prem_encode, prem_loss = self.encoder(prem_embed, premise[1], loss=loss)
+            sent_loss = hyp_loss + prem_loss
 
         features = self.prepare_features(hyp_encode, prem_encode)
 
@@ -77,6 +76,6 @@ class SNLIClassifier(nn.Module):
                 features = self.dropout(features)
 
         if self.args.teacher and self.training:
-            return self.softmax(self.output(features)), sent_true, sent_pred
+            return self.softmax(self.output(features)), sent_loss
 
         return self.softmax(self.output(features))

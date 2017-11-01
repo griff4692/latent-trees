@@ -20,15 +20,15 @@ def train_batch(model, loss, optimizer, sent1, sent2, y_val, args):
     # Forward
     if not args.teacher:
         fx = model(sent1, sent2)
-        output = loss.forward(fx, y_val)
-        x = output
+        output = loss(fx, y_val)
+        total_loss = output
     else:
-        fx, sent_true, sent_pred = model(sent1, sent2)
-        output = loss.forward(fx, y_val)
-        actions = loss.forward(sent_pred, sent_true)
-        x = output + actions
+        fx, lstm_loss = model(sent1, sent2, loss)
+        output = loss(fx, y_val)
+        total_loss = output + lstm_loss
+
     # Backward
-    x.backward()
+    total_loss.backward()
     # Update parameters
     optimizer.step()
     return output.data[0]
