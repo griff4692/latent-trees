@@ -76,6 +76,6 @@ class SNLIClassifier(nn.Module):
                 features = self.dropout(features)
 
         if self.args.teacher and self.training:
-            return self.softmax(self.output(features)), sent_loss
+            return self.softmax(self.output(features)), sent_true, sent_pred
 
         return self.softmax(self.output(features))
