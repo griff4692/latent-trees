@@ -116,7 +116,6 @@ class SPINN(nn.Module):
                 stack_size = stack_batch[b_id].size()
                 buffer_size = buffer_batch[b_id].size()
 
-                # ignore action for continuous buffer
                 act = temp_trans[b_id]
 
                 # ensures it's a valid act according to state of buffer, batch, and timestamp
@@ -125,7 +124,7 @@ class SPINN(nn.Module):
                         stack_batch[b_id], buffer_size, stack_size, act, time_stamp, ops_left)
 
                 # reduce, shift valence
-                reduce_valence, shift_valence, _ = valences[b_id]
+                _, reduce_valence, shift_valence = valences[b_id]
 
                 # 1 - PAD
                 if act == PAD:
