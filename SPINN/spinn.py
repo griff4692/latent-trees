@@ -30,27 +30,18 @@ class SPINN(nn.Module):
         tracking_inputs = torch.cat([torch.cat(b_s), torch.cat(s1_s), torch.cat(s2_s)], dim=1)
         return self.track(tracking_inputs)
 
-    def resolve_action(self, buffer, stack, act, time_stamp, ops_left):
-        # 1 - PAD, 2 - REDUCE, 3 - SHIFT
-        # Hard constraints:
-        # 1st 2 actions are shift
-        # Can't pop from an empty buffer
-        # Can't reduce < 2 size stack
-        # --> default action is PAD (give learner another chance)
-        if time_stamp < 2:
+    def resolve_action(self, buffer, stack, buffer_size, stack_size, act, time_stamp, ops_left):
+        # must pad
+        if buffer_size == 0 and stack_size == 1:
+            return PAD, True
+
+        # must reduce
+        if buffer_size == 0 or stack_size > ops_left:
+            return REDUCE, True
+
+        # must shift
+        if stack_size <= 2:
             return SHIFT, True
-
-        # if there's nothing in the buffer
-        if buffer.size() == 0 and act == SHIFT:
-            return PAD, True
-
-        # switch reduce to a PAD if REDUCE is not allowed
-        if stack.size() <= 2 and act == REDUCE:
-            return PAD, True
-
-        # don't let stack grow to the point where it will be 2 large to shrink to 1 by the end
-        if stack.size() == ops_left and act == SHIFT:
-            return PAD, True
 
         return act, False
 
@@ -59,7 +50,6 @@ class SPINN(nn.Module):
         out = self.word(sentence) # batch, |sent|, h * 2
 
         # batch normalization and dropout
-
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2).contiguous()
             out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
@@ -95,12 +85,13 @@ class SPINN(nn.Module):
 
         lstm_loss = 0
         for time_stamp in range(num_transitions):
-            # how many more operations left - do we need to start to reduce stack size to get to 1
+            # how many more operations left - do we need to start to reduce stack size to get to 1?
             ops_left = num_transitions - time_stamp
 
             reduce_ids = []
             reduce_lh, reduce_lc = [], []
             reduce_rh, reduce_rc = [], []
+            reduce_valences = []
 
             ## Used by Tracking LSTM
             tracking_states = []
@@ -115,30 +106,24 @@ class SPINN(nn.Module):
                     lstm_loss += loss(valences, temp_trans-1)
                     temp_trans = temp_trans.data
                 else:
-                    temp_trans = temp_trans.data.numpy() + 1
+                    temp_trans = temp_trans.data.numpy()
             else:
                 valences = None
                 temp_trans = transitions_batch[time_stamp].data
 
             for b_id in range(batch_size):
-                act = None
                 stack_size = stack_batch[b_id].size()
                 buffer_size = buffer_batch[b_id].size()
 
-                # if stack is longer than number of operations left, we need to reduce
-                if not self.args.continuous_stack and stack_size > ops_left:
-                    act = REDUCE
-                    act_ignored = True
+                act = temp_trans[b_id]
 
-                if act is None:
-                    act = temp_trans[b_id]
-                    # ensures it's a valid act according to state of buffer, batch, and timestamp
-                    if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
-                        act, act_ignored = self.resolve_action(buffer_batch[b_id],
-                        stack_batch[b_id], act, time_stamp, ops_left)
+                # ensures it's a valid act according to state of buffer, batch, and timestamp
+                if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
+                    act, act_ignored = self.resolve_action(buffer_batch[b_id],
+                        stack_batch[b_id], buffer_size, stack_size, act, time_stamp, ops_left)
 
                 # reduce, shift valence
-                valence = valences[b_id] if self.args.tracking else [None, None]
+                _, reduce_valence, shift_valence = valences[b_id]
 
                 # 1 - PAD
                 if act == PAD:
@@ -149,18 +134,20 @@ class SPINN(nn.Module):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(valence[0])
+                    stack_batch[b_id].pop(reduce_valence.clone())
 
                     l = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(valence[0])
+                    stack_batch[b_id].pop(reduce_valence.clone())
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
+                    reduce_valences.append(reduce_valence.clone())
+
                 # 3 - SHIFT
                 if act == SHIFT or (self.args.continuous_stack and buffer_size > 0):
                     word = buffer_batch[b_id].pop()
-                    stack_batch[b_id].add(word, valence[1], time_stamp)
+                    stack_batch[b_id].add(word, shift_valence.clone(), time_stamp)
 
             if len(reduce_ids) > 0:
                 h_lefts = torch.cat(reduce_lh)
@@ -174,7 +161,7 @@ class SPINN(nn.Module):
                     h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights), e_out)
 
                 for i, state in enumerate(zip(h_outs, c_outs)):
-                    stack_batch[reduce_ids[i]].add(state, valence[0])
+                    stack_batch[reduce_ids[i]].add(state, reduce_valences[i])
 
         outputs = []
         for stack in stack_batch:
@@ -183,7 +170,10 @@ class SPINN(nn.Module):
                     print("Stack size is %d.  Should be 1" % stack.size())
                     assert stack.size() == 1
 
-            outputs.append(stack.peek()[0])
+
+            top_h = stack.peek()[0]
+            outputs.append(top_h)
         if self.args.teacher and self.training:
             return torch.cat(outputs), lstm_loss
+
         return torch.cat(outputs)

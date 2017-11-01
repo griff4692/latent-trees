@@ -34,21 +34,28 @@ def train_batch(model, loss, optimizer, sent1, sent2, y_val, args):
     return output.data[0]
 
 def train(args):
-    print("Starting...")
+    print("Starting...\n")
+
     sys.stdout.flush()
     label_names, (train_iter, dev_iter, test_iter, inputs) = prepare_snli_batches(args)
     label_names = label_names[1:] # don't count UNK
     num_labels = len(label_names)
-    print("Prepared Dataset...")
+
+    print("Prepared Dataset...\n")
+
     sys.stdout.flush()
     model = SNLIClassifier(args, len(inputs.vocab.stoi))
     model.set_weight(inputs.vocab.vectors.numpy())
-    print("Instantiated Model...")
+
+    print("Instantiated Model...\n")
+
     sys.stdout.flush()
     if args.gpu > -1:
         model.cuda()
+
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+    
     count_iter = 0
     for epoch in range(args.epochs):
         train_iter.init_epoch()
@@ -125,7 +132,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=1000, help='Number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=False)
+    parser.add_argument('-debug', action='store_true', default=True)
     parser.add_argument('--snli_num_h_layers', type=int, default=1, help='Tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate', type=float, default=0.1)
@@ -135,6 +142,10 @@ if __name__=='__main__':
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
 
     args = parser.parse_args()
+
+    if args.continuous_stack:
+        assert args.tracking
+
     render_args(args)
     sys.stdout.flush()
     train(args)

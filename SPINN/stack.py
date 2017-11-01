@@ -5,9 +5,6 @@ from random import random
 import abc, six
 from abc import ABCMeta
 
-def zero_state(dim):
-    return (Variable(torch.zeros(1, dim)), Variable(torch.zeros(1, dim)))
-
 def create_stack(dim, use_continuous=False):
     if use_continuous:
         return ContinuousStack(dim)
@@ -16,8 +13,9 @@ def create_stack(dim, use_continuous=False):
 
 @six.add_metaclass(ABCMeta)
 class BaseStack:
-    def __init_(self):
-        pass
+    def zero_state(self):
+        return Variable(torch.zeros(1, self.dim), requires_grad=False),
+        Variable(torch.zeros(1, self.dim), requires_grad=False)
 
     @abc.abstractmethod
     def add(self, state, valence, id=0):
@@ -49,15 +47,16 @@ class DefaultStack(BaseStack):
 
     def peek(self):
         if self.size() == 0:
-            return zero_state(self.dim)
+            return zero_state
+
         top = self.states[-1]
         return top
 
     def peek_two(self):
         if self.size() == 0:
-            return zero_state(self.dim), zero_state(self.dim)
+            return self.zero_state(), self.zero_state()
         if self.size() == 1:
-            return self.states[-1], zero_state(self.dim),
+            return self.states[-1], self.zero_state()
 
         return self.states[-1], self.states[-2]
 
@@ -74,13 +73,15 @@ class ContinuousStack(BaseStack):
         self.hs = None
         self.cs = None
 
+    def one_valence(self):
+        return Variable(torch.FloatTensor([1]), requires_grad=False)
+
     def add(self, state, valence, id=0):
         if self.valences is None:
             self.valences = valence
             self.hs, self.cs = state
         else:
             if not valence.size()[0] == 1:
-                print valence.size()
                 raise Exception("Adding more than one valence at a time.")
 
             self.valences = torch.cat([self.valences, valence], 0)
@@ -93,17 +94,16 @@ class ContinuousStack(BaseStack):
 
         if flavor == 'peek':
             # don't overwrite
-            read_mask = Variable(torch.FloatTensor(size,1).zero_())
+            read_mask = Variable(torch.zeros(size, 1))
 
         # top of the stack
         idx = size - 1
-        while mass_remaining > 0.0 and idx >=0:
-            mass_coeff = min(self.valences[idx].data[0], mass_remaining)
-
+        while mass_remaining.data[0] > 0.0 and idx >= 0:
+            mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
             if flavor == 'peek':
-                read_mask[idx] = mass_coeff
+                read_mask[idx] = mass_coeff.clone()
             else:
-                self.valences[idx].data += (coeff * mass_coeff)
+                self.valences[idx] = self.valences[idx] + (coeff * mass_coeff.clone())
 
             mass_remaining -= mass_coeff
             idx -= 1
@@ -111,24 +111,25 @@ class ContinuousStack(BaseStack):
         if flavor == 'peek':
             reduced_hs = torch.mul(read_mask, self.hs).sum(0, keepdim=True)
             reduced_cs = torch.mul(read_mask, self.cs).sum(0, keepdim=True)
-
             return reduced_hs, reduced_hs
 
-
     def peek(self):
-        return self.reduce('peek', 1.0)
+        if self.size() == 0:
+            return self.zero_state()
+
+        return self.reduce('peek', self.one_valence())
 
     def peek_two(self):
-        if self.hs is None:
-            return zero_state(self.dim), zero_state(self.dim)
+        if self.size() == 0:
+            return self.zero_state(), self.zero_state()
 
-        top1 = self.reduce('peek', 1.0)
+        top1 = self.reduce('peek', self.one_valence())
 
         # temporarily reduce mass
-        self.reduce('pop', 1.0)
-        top2 = self.reduce('peek', 1.0)
+        self.reduce('pop', self.one_valence())
+        top2 = self.reduce('peek', self.one_valence())
         # restore mass you temporarily took off
-        self.reduce('restore', 1.0)
+        self.reduce('restore', self.one_valence())
 
         return top1, top2
 
@@ -139,7 +140,7 @@ class ContinuousStack(BaseStack):
         return self.valences.size()[0]
 
     def pop(self, valence):
-        self.reduce('pop', valence.data[0])
+        self.reduce('pop', valence)
 
     def restore(self, valence):
         self.reduce('restore', valence)
