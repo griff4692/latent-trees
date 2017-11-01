@@ -183,7 +183,6 @@ class SPINN(nn.Module):
                 if not stack.size() == 1:
                     print("Stack size is %d.  Should be 1" % stack.size())
                     assert stack.size() == 1
-
             top_h = stack.peek()[0]
             outputs.append(top_h)
 
