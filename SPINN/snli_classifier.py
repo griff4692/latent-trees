@@ -38,19 +38,20 @@ class SNLIClassifier(nn.Module):
             torch.mul(hyp, prem)
         ], dim=1)
 
-    def forward(self, hypothesis, premise):
+    def forward(self, hypothesis, premise, teacher_prob):
         hyp_embed = self.embed(hypothesis[0])
         prem_embed = self.embed(premise[0])
         if not self.args.teacher or not self.training:
+            hyp_trans, prem_trans = hypothesis[1], premise[1]
             if self.args.tracking:
-                hyp_encode = self.encoder(hyp_embed)
-                prem_encode = self.encoder(prem_embed)
-            else:
-                hyp_encode = self.encoder(hyp_embed, hypothesis[1])
-                prem_encode = self.encoder(prem_embed, premise[1])
+                hyp_trans, prem_trans = None, None
+
+            hyp_encode = self.encoder(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
+            prem_encode = self.encoder(prem_embed, prem_trans, premise[2], teacher_prob)
         else:
-            hyp_encode, hyp_true, hyp_pred = self.encoder(hyp_embed, hypothesis[1])
-            prem_encode, prem_true, prem_pred = self.encoder(prem_embed, premise[1])
+            hyp_encode, hyp_true, hyp_pred = self.encoder(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
+            prem_encode, prem_true, prem_pred = self.encoder(prem_embed, premise[1], premise[2], teacher_prob)
+
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
 

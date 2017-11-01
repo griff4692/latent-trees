@@ -22,6 +22,9 @@ class Reduce(nn.Module):
     def forward(self, sl, sr, e=None):
         (hl, cl) = sl
         (hr, cr) = sr
+
+        assert e.size()[0] == hr.size()[0] == hl.size()[0]
+
         if self.track:
             input_lstm = self.compose(torch.cat([hl, hr, e], dim=1))
         else:

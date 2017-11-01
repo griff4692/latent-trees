@@ -47,7 +47,7 @@ class DefaultStack(BaseStack):
 
     def peek(self):
         if self.size() == 0:
-            return zero_state
+            return self.zero_state()
 
         top = self.states[-1]
         return top

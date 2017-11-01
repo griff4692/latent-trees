@@ -6,7 +6,7 @@ from constants import PAD, SHIFT, REDUCE
 from buffer import Buffer
 from stack import create_stack
 from tracking_lstm import TrackingLSTM
-
+from random import random
 
 class SPINN(nn.Module):
     def __init__(self, args):
@@ -33,19 +33,25 @@ class SPINN(nn.Module):
     def resolve_action(self, buffer, stack, buffer_size, stack_size, act, time_stamp, ops_left):
         # must pad
         if buffer_size == 0 and stack_size == 1:
-            return PAD, True
+            raise Exception("Should have immediately returned PAD inside main loop.")
+
+        if buffer_size == 0:
+            return REDUCE, True
+
+        if stack_size < 2:
+            return SHIFT, True
 
         # must reduce
-        if buffer_size == 0 or stack_size > ops_left:
+        if stack_size >= ops_left:
             return REDUCE, True
 
         # must shift
-        if stack_size <= 2:
+        if stack_size < 2:
             return SHIFT, True
 
         return act, False
 
-    def forward(self, sentence, transitions=None):
+    def forward(self, sentence, transitions, num_ops, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2
 
@@ -83,89 +89,96 @@ class SPINN(nn.Module):
                 in list(torch.split(transitions, 1, 1))]
             num_transitions = len(transitions_batch)
 
-        lstm_actions = []
-        true_states = []
+        lstm_actions, true_actions = [], []
+
         for time_stamp in range(num_transitions):
-            # how many more operations left - do we need to start to reduce stack size to get to 1?
             ops_left = num_transitions - time_stamp
 
             reduce_ids = []
             reduce_lh, reduce_lc = [], []
             reduce_rh, reduce_rc = [], []
             reduce_valences = []
-
-            ## Used by Tracking LSTM
-            tracking_states = []
+            reduce_tracking_states = []
 
             if self.args.tracking:
                 valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
-                tracking_states.append(tracking_state)
-                lstm_actions.append(valences)
-                _, temp_trans = valences.max(dim=1)
+                _, pred_trans = valences.max(dim=1)
                 if self.training and self.args.teacher:
                     temp_trans = transitions_batch[time_stamp]
-                    true_states.append(temp_trans - 1)
-                    temp_trans = temp_trans.data
+
+                    for b_id in range(batch_size):
+                        if temp_trans[b_id].data[0] > PAD:
+                            true_actions.append(temp_trans[b_id])
+                            lstm_actions.append(valences[b_id].unsqueeze(0))
+
+                    use_teacher = random() < teacher_prob
+                    temp_trans = temp_trans.data if use_teacher else pred_trans.data
                 else:
-                    temp_trans = temp_trans.data.numpy()
+                    temp_trans = pred_trans.data
             else:
                 valences = None
                 temp_trans = transitions_batch[time_stamp].data
 
             for b_id in range(batch_size):
-                stack_size = stack_batch[b_id].size()
-                buffer_size = buffer_batch[b_id].size()
-
-                act = temp_trans[b_id]
-
-                # ensures it's a valid act according to state of buffer, batch, and timestamp
-                if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
-                    act, act_ignored = self.resolve_action(buffer_batch[b_id],
-                        stack_batch[b_id], buffer_size, stack_size, act, time_stamp, ops_left)
+                stack_size, buffer_size = stack_batch[b_id].size(), buffer_batch[b_id].size()
+                # this sentence is done!
+                my_ops_left = num_ops[b_id] - time_stamp
+                if my_ops_left <= 0:
+                    # should coincide with teacher padding or else num_ops has a bug
+                    if self.training and self.args.teacher:
+                        assert temp_trans[b_id] == PAD
+                    continue
+                else:
+                    act = temp_trans[b_id]
+                    # ensures it's a valid act according to state of buffer, batch, and timestamp
+                    if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
+                        act, act_ignored = self.resolve_action(buffer_batch[b_id],
+                            stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
 
                 # reduce, shift valence
-                _, reduce_valence, shift_valence = valences[b_id]
-
-                # 1 - PAD
-                if act == PAD:
-                    continue
+                reduce_valence, shift_valence = valences[b_id]
+                if self.args.continuous_stack:
+                    reduce_valence = reduce_valence.clone()
+                    shift_valence = shift_valence.clone()
 
                 # 2 - REDUCE
                 if act == REDUCE or (self.args.continuous_stack and stack_size >= 2):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(reduce_valence.clone())
+                    stack_batch[b_id].pop(reduce_valence)
 
                     l = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(reduce_valence.clone())
+                    stack_batch[b_id].pop(reduce_valence)
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
-                    reduce_valences.append(reduce_valence.clone())
+                    reduce_valences.append(reduce_valence)
+                    reduce_tracking_states.append(tracking_state[b_id].unsqueeze(0))
 
                 # 3 - SHIFT
                 if act == SHIFT or (self.args.continuous_stack and buffer_size > 0):
                     word = buffer_batch[b_id].pop()
-                    stack_batch[b_id].add(word, shift_valence.clone(), time_stamp)
+                    stack_batch[b_id].add(word, shift_valence, time_stamp)
 
             if len(reduce_ids) > 0:
                 h_lefts = torch.cat(reduce_lh)
                 c_lefts = torch.cat(reduce_lc)
                 h_rights = torch.cat(reduce_rh)
                 c_rights = torch.cat(reduce_rc)
+
                 if not self.track:
                     h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
                 else:
-                    e_out = torch.cat(tracking_states)
+                    e_out = torch.cat(reduce_tracking_states)
                     h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights), e_out)
 
                 for i, state in enumerate(zip(h_outs, c_outs)):
                     stack_batch[reduce_ids[i]].add(state, reduce_valences[i])
 
         outputs = []
-        for stack in stack_batch:
+        for (i, stack) in enumerate(stack_batch):
             if not self.args.continuous_stack:
                 if not stack.size() == 1:
                     print("Stack size is %d.  Should be 1" % stack.size())
@@ -174,6 +187,6 @@ class SPINN(nn.Module):
             top_h = stack.peek()[0]
             outputs.append(top_h)
 
-        if len(true_states) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_states), torch.cat(lstm_actions)
+        if len(true_actions) > 0 and self.training:
+            return torch.cat(outputs), torch.cat(true_actions), torch.cat(lstm_actions)
         return torch.cat(outputs)
