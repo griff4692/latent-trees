@@ -6,6 +6,7 @@ class Reduce(nn.Module):
         super(Reduce, self).__init__()
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
+        self.track = track
         if not track:
             self.compose = nn.Linear(2 * dim_size, 5 * dim_size)
         else:
@@ -18,10 +19,13 @@ class Reduce(nn.Module):
         h = torch.mul(o, self.tanh(c))
         return (h, c)
 
-    def forward(self, sl, sr):
+    def forward(self, sl, sr, e=None):
         (hl, cl) = sl
         (hr, cr) = sr
-        input_lstm = self.compose(torch.cat([hl, hr], dim = 1))
+        if self.track:
+            input_lstm = self.compose(torch.cat([hl, hr, e], dim=1))
+        else:
+            input_lstm = self.compose(torch.cat([hl, hr], dim = 1))
         output = self.lstm(input_lstm, cl, cr)
 
         return (torch.split(output[0], 1), torch.split(output[1], 1))

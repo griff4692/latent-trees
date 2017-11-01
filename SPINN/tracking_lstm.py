@@ -14,7 +14,7 @@ class TrackingLSTM(nn.Module):
         self.state_weights = nn.Linear(self.args.hidden_size, 4 * self.args.hidden_size, bias=False)
         self.input_weights = nn.Linear(3 * self.args.hidden_size, 4 * self.args.hidden_size)
 
-        # 3 actions: 0 (Pad), 1 (Reduce), 2 (Shift)
+        # 3 actions:1 (Reduce), 2 (Shift)
         self.prediction = nn.Linear(self.args.hidden_size, 3)
 
 
@@ -36,7 +36,7 @@ class TrackingLSTM(nn.Module):
         prediction = None
         if predict:
             prediction = self.softmax(self.prediction(self.h))
-        return prediction
+        return (prediction, self.h)
 
 
     def forward(self, input, predict=True):

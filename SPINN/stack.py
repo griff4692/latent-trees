@@ -16,7 +16,6 @@ def create_stack(dim, use_continuous=False):
 
 @six.add_metaclass(ABCMeta)
 class BaseStack:
-
     def __init_(self):
         pass
 
@@ -81,7 +80,7 @@ class ContinuousStack(BaseStack):
             self.hs, self.cs = state
         else:
             if not valence.size()[0] == 1:
-                print valence.size()
+                print valen
                 raise Exception("Adding more than one valence at a time.")
 
             self.valences = torch.cat([self.valences, valence], 0)
