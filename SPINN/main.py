@@ -127,6 +127,10 @@ if __name__=='__main__':
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
 
     args = parser.parse_args()
+
+    if args.continuous_stack:
+        assert args.tracking
+
     render_args(args)
     sys.stdout.flush()
     train(args)

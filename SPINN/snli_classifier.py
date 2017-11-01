@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from spinn import SPINN
 
 class SNLIClassifier(nn.Module):
@@ -37,7 +36,6 @@ class SNLIClassifier(nn.Module):
             hyp, prem, prem - hyp,
             torch.mul(hyp, prem)
         ], dim=1)
-
 
     def forward(self, hypothesis, premise):
         hyp_embed = self.embed(hypothesis[0])
