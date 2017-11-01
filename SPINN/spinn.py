@@ -55,7 +55,6 @@ class SPINN(nn.Module):
         return act, False
 
     def forward(self, sentence, transitions=None):
-
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2
 

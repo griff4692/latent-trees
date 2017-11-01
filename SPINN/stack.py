@@ -80,7 +80,7 @@ class ContinuousStack(BaseStack):
             self.hs, self.cs = state
         else:
             if not valence.size()[0] == 1:
-                print valen
+                print valence.size()
                 raise Exception("Adding more than one valence at a time.")
 
             self.valences = torch.cat([self.valences, valence], 0)
