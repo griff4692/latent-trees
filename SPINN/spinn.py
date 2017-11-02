@@ -135,11 +135,14 @@ class SPINN(nn.Module):
                         act, act_ignored = self.resolve_action(buffer_batch[b_id],
                             stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
 
-                # reduce, shift valence
-                reduce_valence, shift_valence = valences[b_id]
-                if self.args.continuous_stack:
-                    reduce_valence = reduce_valence.clone()
-                    shift_valence = shift_valence.clone()
+                if self.args.tracking:
+                    # reduce, shift valence
+                    reduce_valence, shift_valence = valences[b_id]
+                    if self.args.continuous_stack:
+                        reduce_valence = reduce_valence.clone()
+                        shift_valence = shift_valence.clone()
+                else:
+                    reduce_valence, shift_valence = None, None
 
                 # 2 - REDUCE
                 if act == REDUCE or (self.args.continuous_stack and stack_size >= 2):
@@ -154,8 +157,9 @@ class SPINN(nn.Module):
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
 
-                    reduce_valences.append(reduce_valence)
-                    reduce_tracking_states.append(tracking_state[b_id].unsqueeze(0))
+                    if self.args.tracking:
+                        reduce_valences.append(reduce_valence)
+                        reduce_tracking_states.append(tracking_state[b_id].unsqueeze(0))
 
                 # 3 - SHIFT
                 if act == SHIFT or (self.args.continuous_stack and buffer_size > 0):
@@ -168,14 +172,15 @@ class SPINN(nn.Module):
                 h_rights = torch.cat(reduce_rh)
                 c_rights = torch.cat(reduce_rc)
 
-                if not self.track:
-                    h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
-                else:
+                if self.args.tracking:
                     e_out = torch.cat(reduce_tracking_states)
                     h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights), e_out)
+                else:
+                    h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
 
                 for i, state in enumerate(zip(h_outs, c_outs)):
-                    stack_batch[reduce_ids[i]].add(state, reduce_valences[i])
+                    reduce_valence = reduce_valences[i] if self.args.tracking else None
+                    stack_batch[reduce_ids[i]].add(state, reduce_valence)
 
         outputs = []
         for (i, stack) in enumerate(stack_batch):

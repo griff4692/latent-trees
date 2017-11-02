@@ -23,10 +23,9 @@ class Reduce(nn.Module):
         (hl, cl) = sl
         (hr, cr) = sr
 
-        assert e.size()[0] == hr.size()[0] == hl.size()[0]
-
         if self.track:
             input_lstm = self.compose(torch.cat([hl, hr, e], dim=1))
+            assert e.size()[0] == hr.size()[0] == hl.size()[0]
         else:
             input_lstm = self.compose(torch.cat([hl, hr], dim = 1))
         output = self.lstm(input_lstm, cl, cr)

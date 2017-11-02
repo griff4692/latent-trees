@@ -23,10 +23,12 @@ def add_num_ops_and_shift_acts(sent):
 def predict(model, sent1, sent2, cuda=-1):
     sent1, sent2 = add_num_ops_and_shift_acts(sent1), \
         add_num_ops_and_shift_acts(sent2)
-    output = model(sent1, sent2, None)
+    output, _, _ = model(sent1, sent2, None)
+    output = output.data
     if cuda > -1:
-        return output.data.cpu().numpy().argmax(axis=1)
-    return output.data.numpy().argmax(axis=1)
+        output = output.cpu()
+
+    return output.numpy().argmax(axis=1)
 
 def train_batch(model, loss, optimizer, sent1, sent2, y_val, teacher_prob):
     sent1, sent2 = add_num_ops_and_shift_acts(sent1), \

@@ -48,6 +48,7 @@ class SNLIClassifier(nn.Module):
 
             hyp_encode = self.encoder(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
             prem_encode = self.encoder(prem_embed, prem_trans, premise[2], teacher_prob)
+            sent_true, sent_pred = None, None
         else:
             hyp_encode, hyp_true, hyp_pred = self.encoder(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
             prem_encode, prem_true, prem_pred = self.encoder(prem_embed, premise[1], premise[2], teacher_prob)
@@ -75,7 +76,5 @@ class SNLIClassifier(nn.Module):
             if self.args.dropout_rate > 0:
                 features = self.dropout(features)
 
-        if self.args.teacher and self.training:
-            return self.softmax(self.output(features)), sent_true, sent_pred
-
-        return self.softmax(self.output(features))
+        output = self.softmax(self.output(features))
+        return output, sent_true, sent_pred
