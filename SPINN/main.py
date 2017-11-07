@@ -8,10 +8,10 @@ import argparse
 import sys
 from utils import render_args
 
-def predict(model, sent1, sent2, cuda=False):
+def predict(model, sent1, sent2, cuda=-1):
     model.eval()
     output = model(sent1, sent2)
-    if cuda:
+    if cuda > -1:
         return output.data.cpu().numpy().argmax(axis=1)
     return output.data.numpy().argmax(axis=1)
 
@@ -120,14 +120,14 @@ if __name__=='__main__':
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
-    parser.add_argument('--eval_freq', type=int, default=250, help='number of examples between evaluation on dev set.')
+    parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
     parser.add_argument('-debug', action='store_true', default=True)
-    parser.add_argument('--snli_num_h_layers', type=int, default=1, help='tunable hyperparameter.')
+    parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
     parser.add_argument('--dropout_rate_classify', type=float, default=0.05)
     parser.add_argument('-no_batch_norm', action='store_true', default=False)
-    parser.add_argument('-gpu', type=int, action='store_true', default=-1)
+    parser.add_argument('--gpu', type=int, default=-1)
     args = parser.parse_args()
     render_args(args)
     sys.stdout.flush()
