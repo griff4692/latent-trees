@@ -24,6 +24,9 @@ def train_batch(model, loss, optimizer, sent1, sent2, y_val):
     output = loss.forward(fx, y_val)
     # Backward
     output.backward()
+    for param in model.parameters():
+        if param.grad is not None:
+            param.grad.data.clamp(-5, 5)
     # Update parameters
     optimizer.step()
     return output.data[0]
@@ -40,7 +43,7 @@ def train(args):
     model.set_weight(inputs.vocab.vectors.numpy())
     print ("Instantiated Model...")
     sys.stdout.flush()
-    if args.gpu:
+    if args.gpu > -1:
         model.cuda()
     loss = torch.nn.CrossEntropyLoss(size_average=True)
     optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
@@ -73,7 +76,7 @@ def train(args):
                         (dev_batch.premise.transpose(0, 1),
                             dev_batch.premise_transitions.t()), args.gpu
                     )
-                    if args.gpu:
+                    if args.gpu > -1:
                         true_labels =  dev_batch.label.data.cpu().numpy() - 1.0
                     else:
                         true_labels =  dev_batch.label.data.numpy() - 1.0
@@ -117,13 +120,14 @@ if __name__=='__main__':
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
-    parser.add_argument('--eval_freq', type=int, default=25000, help='number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=False)
+    parser.add_argument('--eval_freq', type=int, default=250, help='number of examples between evaluation on dev set.')
+    parser.add_argument('-debug', action='store_true', default=True)
     parser.add_argument('--snli_num_h_layers', type=int, default=1, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
-    parser.add_argument('--dropout_rate', type=float, default=0.1)
+    parser.add_argument('--dropout_rate_input', type=float, default=0.1)
+    parser.add_argument('--dropout_rate_classify', type=float, default=0.05)
     parser.add_argument('-no_batch_norm', action='store_true', default=False)
-    parser.add_argument('-gpu', action='store_true', default=False)
+    parser.add_argument('-gpu', type=int, action='store_true', default=-1)
     args = parser.parse_args()
     render_args(args)
     sys.stdout.flush()
