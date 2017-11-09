@@ -12,14 +12,16 @@ class SPINN(nn.Module):
     def __init__(self, args):
         super(SPINN, self).__init__()
         self.args = args
-        self.dropout = nn.Dropout(p=self.args.dropout_rate)
-        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
-        self.word = nn.Linear(self.args.embed_dim, 2 * self.args.hidden_size)
+
+        self.dropout = nn.Dropout(p=self.args.dropout_rate_input)
+        self.batch_norm1 = nn.BatchNorm1d(self.args.hidden_size * 2)
+
+        self.word = nn.Linear(self.args.embed_dim, self.args.hidden_size * 2)
+        self.reduce = Reduce(self.args.hidden_size)
+
         self.track = None
         if self.args.tracking:
             self.track = TrackingLSTM(self.args)
-        self.reduce = Reduce(self.args.hidden_size)
-        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
 
     def update_tracker(self, buffer, stack, batch_size):
         b_s, s1_s, s2_s = [], [], []
@@ -54,15 +56,13 @@ class SPINN(nn.Module):
     def forward(self, sentence, transitions, num_ops, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2
-
+        if self.args.dropout_rate_input > 0:
+            out = self.dropout(out) # batch, |sent|, h * 2
         # batch normalization and dropout
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2).contiguous()
             out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
             out = out.transpose(1, 2)
-
-        if self.args.dropout_rate > 0:
-            out = self.dropout(out) # batch, |sent|, h * 2
 
         (h_sent, c_sent) = torch.chunk(out, 2, 2)  # ((batch, |sent|, h), (batch, |sent|, h))
         buffer_batch = [Buffer(h_s, c_s, self.args) for h_s, c_s
@@ -111,7 +111,7 @@ class SPINN(nn.Module):
                             true_actions.append(temp_trans[b_id])
                             lstm_actions.append(valences[b_id].unsqueeze(0))
 
-                    use_teacher = random() < teacher_prob
+                    use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
                     temp_trans = temp_trans.data if use_teacher else pred_trans.data
                 else:
                     temp_trans = pred_trans.data

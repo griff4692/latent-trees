@@ -1,33 +1,63 @@
 import torch
 import torch.nn as nn
+import numpy as np
+
+# Original Code Base
+def HeKaimingInitializer(param):
+    fan = param.size()
+    init = np.random.normal(scale=np.sqrt(4.0 / (fan[0] + fan[1])), size=fan).astype(np.float32)
+    param.data.set_(torch.from_numpy(init))
+
+# Stack overflow
+class LayerNormalization(nn.Module):
+    def __init__(self, hidden_size, eps=1e-5):
+        super(LayerNormalization, self).__init__()
+
+        self.eps = eps
+        self.a2 = nn.Parameter(torch.ones(1, hidden_size), requires_grad=True)
+        self.b2 = nn.Parameter(torch.zeros(1, hidden_size), requires_grad=True)
+
+    def forward(self, z):
+        mu = torch.mean(z)
+        sigma = torch.std(z)
+        ln_out = (z - mu) / (sigma + self.eps)
+        ln_out = ln_out * self.a2 + self.b2
+        return ln_out
 
 class Reduce(nn.Module):
-    def __init__(self, dim_size, track=False):
+    def __init__(self, dim_size):
         super(Reduce, self).__init__()
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
-        self.track = track
-        if not track:
-            self.compose = nn.Linear(2 * dim_size, 5 * dim_size)
-        else:
-            self.compose = nn.Linear(3 * dim_size, 5 * dim_size)
+        self.compose_left = nn.Linear(dim_size, 5 * dim_size)
+        HeKaimingInitializer(self.compose_left.weight)
+        self.compose_right = nn.Linear(dim_size, 5 * dim_size, bias=False)
+        HeKaimingInitializer(self.compose_right.weight)
+
+        self.compose_e = nn.Linear(dim_size, 5 * dim_size, bias=False)
+
+        self.left_ln = LayerNormalization(dim_size)
+        self.right_ln = LayerNormalization(dim_size)
 
     def lstm(self, input, cl, cr):
         (i, fl, fr, o, g) = torch.chunk(input, 5, 1)
         c = torch.mul(cl, self.sigmoid(fl)) + torch.mul(cr, self.sigmoid(fr)) + \
             torch.mul(self.sigmoid(i), self.tanh(g))
-        h = torch.mul(o, self.tanh(c))
+        h = torch.mul(self.sigmoid(o), self.tanh(c))
         return (h, c)
 
     def forward(self, sl, sr, e=None):
         (hl, cl) = sl
         (hr, cr) = sr
 
-        if self.track:
-            input_lstm = self.compose(torch.cat([hl, hr, e], dim=1))
-            assert e.size()[0] == hr.size()[0] == hl.size()[0]
-        else:
-            input_lstm = self.compose(torch.cat([hl, hr], dim = 1))
+        input_lstm_left = self.compose_left(self.left_ln(hl))
+        input_lstm_right = self.compose_right(self.right_ln(hl))
+        input_lstm = input_lstm_right + input_lstm_left
+
+        if e is not None:
+            input_lstm_e = self.compose_e(e)
+            input_lstm += input_lstm_e
+
         output = self.lstm(input_lstm, cl, cr)
 
         return (torch.split(output[0], 1), torch.split(output[1], 1))

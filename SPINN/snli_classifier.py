@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from spinn import SPINN
+from actions import HeKaimingInitializer, LayerNormalization
+from utils import cudify
 
 class SNLIClassifier(nn.Module):
     def __init__(self, args, vocab_size):
@@ -11,22 +13,21 @@ class SNLIClassifier(nn.Module):
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
 
-        self.batch_norm_mlp_input = nn.BatchNorm1d(4 * self.args.hidden_size)
-        self.batch_norm_mlp_hidden = nn.BatchNorm1d(self.args.snli_h_dim)
+        self.layer_norm_mlp_input = LayerNormalization(4 * self.args.hidden_size)
+        self.layer_norm_mlp_hidden = LayerNormalization(self.args.snli_h_dim)
 
-        self.dropout = nn.Dropout(p=self.args.dropout_rate)
+        self.dropout = nn.Dropout(p=self.args.dropout_rate_classify)
 
         self.mlp = []
         for i in range(self.args.snli_num_h_layers):
             input_dim = 4 * self.args.hidden_size if i == 0 else self.args.snli_h_dim
             out_dim = self.args.snli_h_dim
-            if args.gpu > -1:
-                self.mlp.append(nn.Linear(input_dim, out_dim).cuda())
-            else:
-                self.mlp.append(nn.Linear(input_dim, out_dim))
+            self.mlp.append(cudify(args, nn.Linear(input_dim, out_dim)))
+            HeKaimingInitializer(self.mlp[-1].weight)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
-        self.encoder = SPINN(self.args)
+        HeKaimingInitializer(self.output.weight)
+        self.spinn = SPINN(self.args)
 
     def set_weight(self, weight):
         self.embed.weight.data.copy_(torch.from_numpy(weight))
@@ -46,35 +47,29 @@ class SNLIClassifier(nn.Module):
             if self.args.tracking:
                 hyp_trans, prem_trans = None, None
 
-            hyp_encode = self.encoder(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
-            prem_encode = self.encoder(prem_embed, prem_trans, premise[2], teacher_prob)
+            hyp_encode = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
+            prem_encode = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
             sent_true, sent_pred = None, None
         else:
-            hyp_encode, hyp_true, hyp_pred = self.encoder(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
-            prem_encode, prem_true, prem_pred = self.encoder(prem_embed, premise[1], premise[2], teacher_prob)
-
+            hyp_encode, hyp_true, hyp_pred = self.spinn(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
+            prem_encode, prem_true, prem_pred = self.spinn(prem_embed, premise[1], premise[2], teacher_prob)
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
 
         features = self.prepare_features(hyp_encode, prem_encode)
+        features = self.layer_norm_mlp_input(features)
 
-        if not self.args.no_batch_norm:
-            features = self.batch_norm_mlp_input(features)
-
-        if self.args.dropout_rate > 0:
+        if self.args.dropout_rate_classify > 0:
             features = self.dropout(features)
 
         for (i, layer) in enumerate(self.mlp):
             # ReLu plus weight matrix
             features = self.relu(layer(features))
-
             # batch norm
-            if not self.args.no_batch_norm:
-                features = self.batch_norm_mlp_hidden(features)
-
+            features = self.layer_norm_mlp_hidden(features)
             # dropout
-            if self.args.dropout_rate > 0:
+            if self.args.dropout_rate_classify > 0:
                 features = self.dropout(features)
 
-        output = self.softmax(self.output(features))
+        output = self.output(features)
         return output, sent_true, sent_pred

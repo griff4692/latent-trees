@@ -24,6 +24,7 @@ class TrackingLSTM(nn.Module):
 
     def lstm(self, inputs, predict=True):
         h = self.state_weights(self.h) # batch, 4 * dim
+
         inputs_transform = self.input_weights(inputs)
         x_plus_h = h + inputs_transform
         (i, f, o, g) = torch.chunk(x_plus_h, 4, 1) # (batch, dim) x 4
