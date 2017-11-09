@@ -3,10 +3,13 @@ import torch.nn as nn
 import numpy as np
 
 # Original Code Base
-def HeKaimingInitializer(param):
+def HeKaimingInitializer(param, cuda=False):
     fan = param.size()
     init = np.random.normal(scale=np.sqrt(4.0 / (fan[0] + fan[1])), size=fan).astype(np.float32)
-    param.data.set_(torch.from_numpy(init))
+    if cuda:
+       param.data.set_(torch.from_numpy(init).cuda())
+    else:
+       param.data.set_(torch.from_numpy(init))
 
 # Stack overflow
 class LayerNormalization(nn.Module):

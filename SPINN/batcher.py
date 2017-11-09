@@ -15,7 +15,7 @@ def prepare_snli_batches(args):
     train_path = 'snli_1.0_clean_train.jsonl'
     debug_train = 'snli_1.0_mini_clean_train.jsonl'
     debug_validation = 'snli_1.0_mini_dev.jsonl'
-    debug_test = 'snli_1.0_ini_test.jsonl'
+    debug_test = 'snli_1.0_mini_test.jsonl'
 
     if not os.path.exists(os.path.join(data_dir, train_path)):
         remove_train_unk()
@@ -32,7 +32,7 @@ def prepare_snli_batches(args):
 
     inputs.build_vocab(train, dev, test)
     answers.build_vocab(train)
-    glove = vocab.GloVe(name='6B', dim=args.embed_dim)
+    glove = vocab.GloVe(name='840B', dim=args.embed_dim)
     inputs.vocab.set_vectors(stoi=glove.stoi, vectors=glove.vectors,dim=args.embed_dim)
     train_iter, dev_iter, test_iter = data.BucketIterator.splits(
         (train, dev, test), batch_size=args.batch_size, device=args.gpu)

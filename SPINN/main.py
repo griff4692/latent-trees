@@ -20,12 +20,12 @@ def predict(model, sent1, sent2, cuda=-1):
 def get_l2_loss(model, l2_lambda):
     loss = 0.0
     for w in model.parameters():
-        if w.requires_grad:
+        if w.grad is not None:
             loss += l2_lambda * torch.sum(torch.pow(w, 2))
     return loss
 
 
-def train_batch(model, loss, optimizer, sent1, sent2, y_val):
+def train_batch(model, loss, optimizer, sent1, sent2, y_val, step):
     # Reset gradient
     optimizer.zero_grad()
     # Forward
@@ -39,9 +39,10 @@ def train_batch(model, loss, optimizer, sent1, sent2, y_val):
     # Backward
     total_loss.backward()
     for param in model.parameters():
-        if param.grad:
+        if param.grad is not None:
             param.grad.data.clamp(-5, 5)
     # Update parameters
+    optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
     optimizer.step()
     return total_loss.data[0]
 
@@ -63,17 +64,19 @@ def train(args):
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0.001, betas=(0.9, 0.999), eps=1e-08)
     count_iter = 0
     train_iter.repeat = False
+    step = 0
     for epoch in range(args.epochs):
         train_iter.init_epoch()
         cost = 0
         for batch_idx, batch in enumerate(train_iter):
             model.train()
+            step += 1
             count_iter += batch.batch_size
             cost += train_batch(
                 model, loss, optimizer,
                 (batch.hypothesis.transpose(0, 1), batch.hypothesis_transitions.t()),
                 (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
-                batch.label - 1 # TODO double check this works
+                batch.label - 1 , step=step
             )
 
             if count_iter >= args.eval_freq:

@@ -12,20 +12,21 @@ class SNLIClassifier(nn.Module):
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
 
-        self.layer_norm_mlp_input = LayerNormalization(4 * self.args.hidden_size / 2)
+        self.layer_norm_mlp_input = LayerNormalization(2 * self.args.hidden_size)
         self.layer_norm_mlp_hidden = LayerNormalization(self.args.snli_h_dim)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_classify)
 
         self.mlp = []
         for i in range(self.args.snli_num_h_layers):
-            input_dim = 4 * self.args.hidden_size / 2 if i == 0 else self.args.snli_h_dim
+            input_dim = 2 * self.args.hidden_size if i == 0 else self.args.snli_h_dim
             out_dim = self.args.snli_h_dim
             if args.gpu > -1:
                 self.mlp.append(nn.Linear(input_dim, out_dim).cuda())
+                HeKaimingInitializer(self.mlp[-1].weight, True)
             else:
                 self.mlp.append(nn.Linear(input_dim, out_dim))
-            HeKaimingInitializer(self.mlp[-1].weight)
+                HeKaimingInitializer(self.mlp[-1].weight)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
         HeKaimingInitializer(self.output.weight)
