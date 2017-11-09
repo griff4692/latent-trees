@@ -40,7 +40,7 @@ def get_l2_loss(model, l2_lambda):
     return loss
 
 
-def train_batch(model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
+def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
     sent1, sent2 = add_num_ops_and_shift_acts(sent1), \
         add_num_ops_and_shift_acts(sent2)
 
@@ -104,7 +104,7 @@ def train(args):
                 (batch.hypothesis.transpose(0, 1), batch.hypothesis_transitions.t()),
                 (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
                 batch.label - 1,
-                step=step
+                step,
                 teacher_prob
             )
 
