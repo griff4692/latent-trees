@@ -28,7 +28,6 @@ class SPINN(nn.Module):
         if self.args.dropout_rate_input > 0:
             out = self.dropout(out) # batch, |sent|, h * 2
         # batch normalization and dropout
-
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2).contiguous()
             out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature

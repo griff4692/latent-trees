@@ -2,9 +2,15 @@ from torchtext import datasets
 from torchtext import data
 import torchtext.vocab as vocab
 import os
-import sys 
+import sys
 
 from snli_preprocess import gen_mini, remove_train_unk, MINI_SIZE
+
+def resolve_data_bug(data_dir):
+    if os.path.exists(os.path.join(data_dir, 'snli_1.0_clean_train.jsonl')):
+        return "snli_1.0_"
+    else:
+        return ""
 
 def prepare_snli_batches(args):
     inputs = datasets.snli.ParsedTextField(lower=True)
@@ -12,10 +18,11 @@ def prepare_snli_batches(args):
     answers = data.Field(sequential=False)
     data_dir = '.data/snli/snli_1.0/'
 
-    train_path = 'clean_train.jsonl'
-    debug_train = 'mini_clean_train.jsonl'
-    debug_validation = 'mini_dev.jsonl'
-    debug_test = 'mini_test.jsonl'
+    pre = resolve_data_bug(data_dir)
+    train_path = pre + 'clean_train.jsonl'
+    debug_train = pre + 'mini_clean_train.jsonl'
+    debug_validation = pre + 'mini_dev.jsonl'
+    debug_test = pre + 'mini_test.jsonl'
 
     if not os.path.exists(os.path.join(data_dir, 'snli_1.0_' + train_path)):
         remove_train_unk()

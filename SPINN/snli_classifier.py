@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from spinn import SPINN
 from actions import HeKaimingInitializer, LayerNormalization
+from utils import cudify
 
 class SNLIClassifier(nn.Module):
     def __init__(self, args, vocab_size):
@@ -21,10 +22,7 @@ class SNLIClassifier(nn.Module):
         for i in range(self.args.snli_num_h_layers):
             input_dim = 4 * self.args.hidden_size / 2 if i == 0 else self.args.snli_h_dim
             out_dim = self.args.snli_h_dim
-            if args.gpu > -1:
-                self.mlp.append(nn.Linear(input_dim, out_dim).cuda())
-            else:
-                self.mlp.append(nn.Linear(input_dim, out_dim))
+            self.mlp.append(cudify(args, nn.Linear(input_dim, out_dim)))
             HeKaimingInitializer(self.mlp[-1].weight)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
