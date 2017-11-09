@@ -13,6 +13,7 @@ class SNLIClassifier(nn.Module):
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
 
+
         self.layer_norm_mlp_input = LayerNormalization(4 * self.args.hidden_size)
         self.layer_norm_mlp_hidden = LayerNormalization(self.args.snli_h_dim)
 

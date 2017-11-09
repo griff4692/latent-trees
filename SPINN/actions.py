@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
 # Original SPINN Code Base
 def HeKaimingInitializer(param, cuda=False):
     fan = param.size()

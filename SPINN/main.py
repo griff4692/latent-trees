@@ -21,13 +21,6 @@ def add_num_ops_and_shift_acts(sent):
 
     return (sent[0], trans, num_ops)
 
-def get_l2_loss(model, l2_lambda):
-    loss = 0.0
-    for w in model.parameters():
-        if w.requires_grad:
-            loss += l2_lambda * torch.sum(torch.pow(w, 2))
-    return loss
-
 def predict(args, model, sent1, sent2, cuda=False):
     sent1, sent2 = add_num_ops_and_shift_acts(sent1), \
         add_num_ops_and_shift_acts(sent2)
@@ -39,7 +32,15 @@ def predict(args, model, sent1, sent2, cuda=False):
         return logits.data.cpu().numpy().argmax(axis=1)
     return logits.data.numpy().argmax(axis=1)
 
-def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, teacher_prob):
+def get_l2_loss(model, l2_lambda):
+    loss = 0.0
+    for w in model.parameters():
+        if w.grad is not None:
+            loss += l2_lambda * torch.sum(torch.pow(w, 2))
+    return loss
+
+
+def train_batch(model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
     sent1, sent2 = add_num_ops_and_shift_acts(sent1), \
         add_num_ops_and_shift_acts(sent2)
 
@@ -62,6 +63,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, teacher_prob)
         if param.grad is not None:
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters
+    optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
     optimizer.step()
     return total_loss.data[0]
 
@@ -86,18 +88,23 @@ def train(args):
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, betas=(0.9, 0.999), eps=1e-08)
     count_iter = 0
     train_iter.repeat = False
+
+    step = 0
     teacher_prob = 1.0
+
     for epoch in range(args.epochs):
         train_iter.init_epoch()
         cost = 0
         for batch_idx, batch in enumerate(train_iter):
             model.train()
+            step += 1
             count_iter += batch.batch_size
             cost += train_batch(args,
                 model, loss, optimizer,
                 (batch.hypothesis.transpose(0, 1), batch.hypothesis_transitions.t()),
                 (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
                 batch.label - 1,
+                step=step
                 teacher_prob
             )
 
@@ -168,9 +175,9 @@ if __name__=='__main__':
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
-    parser.add_argument('--eval_freq', type=int, default=250, help='number of examples between evaluation on dev set.')
+    parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
     parser.add_argument('-debug', action='store_true', default=False)
-    parser.add_argument('--snli_num_h_layers', type=int, default=1, help='tunable hyperparameter.')
+    parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
     parser.add_argument('--dropout_rate_classify', type=float, default=0.1)
