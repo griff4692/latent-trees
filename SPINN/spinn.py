@@ -14,12 +14,12 @@ class SPINN(nn.Module):
         self.args = args
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_input)
-        self.batch_norm1 = nn.BatchNorm1d(2 * self.args.hidden_size)
+        self.batch_norm1 = nn.BatchNorm1d(self.args.hidden_size)
 
-        self.word = nn.Linear(self.args.embed_dim, 2 * self.args.hidden_size)
+        self.word = nn.Linear(self.args.embed_dim, self.args.hidden_size)
         if not transitions:
-            self.track = nn.Linear(self.args.hidden_size, 2)
-        self.reduce = Reduce(self.args.hidden_size)
+            self.track = nn.Linear(self.args.hidden_size / 2, 2)
+        self.reduce = Reduce(self.args.hidden_size / 2)
 
     def forward(self, sentence, transitions):
         batch_size, sent_len, _  = sentence.size()

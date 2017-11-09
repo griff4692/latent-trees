@@ -1,6 +1,7 @@
 from __future__ import print_function
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
 from snli_classifier import SNLIClassifier
 from batcher import prepare_snli_batches
 import numpy as np
@@ -11,25 +12,38 @@ from utils import render_args
 def predict(model, sent1, sent2, cuda=-1):
     model.eval()
     output = model(sent1, sent2)
+    logits = F.log_softmax(output)
     if cuda > -1:
-        return output.data.cpu().numpy().argmax(axis=1)
-    return output.data.numpy().argmax(axis=1)
+        return logits.data.cpu().numpy().argmax(axis=1)
+    return logits.data.numpy().argmax(axis=1)
+
+def get_l2_loss(model, l2_lambda):
+    loss = 0.0
+    for w in model.parameters():
+        if w.requires_grad:
+            loss += l2_lambda * torch.sum(torch.pow(w, 2))
+    return loss
+
 
 def train_batch(model, loss, optimizer, sent1, sent2, y_val):
     # Reset gradient
     optimizer.zero_grad()
     # Forward
     fx = model(sent1, sent2)
+    logits = F.log_softmax(fx)
 
-    output = loss.forward(fx, y_val)
+    total_loss = loss(logits, y_val)
+
+    total_loss += get_l2_loss(model, 1e-05)
+
     # Backward
-    output.backward()
+    total_loss.backward()
     for param in model.parameters():
-        if param.grad is not None:
+        if param.grad:
             param.grad.data.clamp(-5, 5)
     # Update parameters
     optimizer.step()
-    return output.data[0]
+    return total_loss.data[0]
 
 def train(args):
     print ("Starting...")
@@ -45,8 +59,8 @@ def train(args):
     sys.stdout.flush()
     if args.gpu > -1:
         model.cuda()
-    loss = torch.nn.CrossEntropyLoss(size_average=True)
-    optimizer = optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+    loss = torch.nn.NLLLoss()
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0.001, betas=(0.9, 0.999), eps=1e-08)
     count_iter = 0
     train_iter.repeat = False
     for epoch in range(args.epochs):
@@ -121,7 +135,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=True)
+    parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
