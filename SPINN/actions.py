@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-# Original Code Base
+
+# Original SPINN Code Base
 def HeKaimingInitializer(param, cuda=False):
     fan = param.size()
     init = np.random.normal(scale=np.sqrt(4.0 / (fan[0] + fan[1])), size=fan).astype(np.float32)
@@ -28,17 +29,20 @@ class LayerNormalization(nn.Module):
         return ln_out
 
 class Reduce(nn.Module):
-    def __init__(self, dim_size):
+    def __init__(self, args):
+        self.args = args
         super(Reduce, self).__init__()
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
-        self.compose_left = nn.Linear(dim_size, 5 * dim_size)
-        HeKaimingInitializer(self.compose_left.weight)
-        self.compose_right = nn.Linear(dim_size, 5 * dim_size, bias=False)
-        HeKaimingInitializer(self.compose_right.weight)
+        self.compose_left = nn.Linear(self.args.hidden_size, 5 * self.args.hidden_size)
+        HeKaimingInitializer(self.compose_left.weight, self.args.gpu > -1)
+        self.compose_right = nn.Linear(self.args.hidden_size, 5 * self.args.hidden_size, bias=False)
+        HeKaimingInitializer(self.compose_right.weight, self.args.gpu > -1)
 
-        self.left_ln = LayerNormalization(dim_size)
-        self.right_ln = LayerNormalization(dim_size)
+        self.compose_e = nn.Linear(self.args.hidden_size, 5 * self.args.hidden_size, bias=False)
+
+        self.left_ln = LayerNormalization(self.args.hidden_size)
+        self.right_ln = LayerNormalization(self.args.hidden_size)
 
     def lstm(self, input, cl, cr):
         (i, fl, fr, o, g) = torch.chunk(input, 5, 1)
@@ -47,12 +51,17 @@ class Reduce(nn.Module):
         h = torch.mul(self.sigmoid(o), self.tanh(c))
         return (h, c)
 
-    def forward(self, sl, sr):
+    def forward(self, sl, sr, e=None):
         (hl, cl) = sl
         (hr, cr) = sr
+
         input_lstm_left = self.compose_left(self.left_ln(hl))
         input_lstm_right = self.compose_right(self.right_ln(hl))
         input_lstm = input_lstm_right + input_lstm_left
+
+        if e is not None:
+            input_lstm_e = self.compose_e(e)
+            input_lstm += input_lstm_e
 
         output = self.lstm(input_lstm, cl, cr)
 

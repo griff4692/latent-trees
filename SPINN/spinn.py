@@ -5,88 +5,194 @@ from actions import Reduce
 from constants import PAD, SHIFT, REDUCE
 from buffer import Buffer
 from stack import create_stack
-
+from tracking_lstm import TrackingLSTM
+from random import random
 
 class SPINN(nn.Module):
-    #TODO: Add tracking LSTM
-    def __init__(self, args, transitions=True):
+    def __init__(self, args):
         super(SPINN, self).__init__()
         self.args = args
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_input)
+        self.batch_norm1 = nn.BatchNorm1d(self.args.hidden_size * 2)
 
-        self.word = nn.Linear(self.args.embed_dim, self.args.hidden_size)
-        if not transitions:
-            self.track = nn.Linear(self.args.hidden_size // 2, 2)
-        self.reduce = Reduce(self.args.hidden_size // 2)
+        self.word = nn.Linear(self.args.embed_dim, self.args.hidden_size * 2)
+        self.reduce = Reduce(self.args)
+        
+        self.track = None
+        if self.args.tracking:
+            self.track = TrackingLSTM(self.args)
 
-    def forward(self, sentence, transitions):
+    def update_tracker(self, buffer, stack, batch_size):
+        b_s, s1_s, s2_s = [], [], []
+        for b_id in range(batch_size):
+            b = buffer[b_id].peek()[0]
+            s1, s2 = stack[b_id].peek_two()
+            b_s.append(b); s1_s.append(s1[0]); s2_s.append(s2[0])
+        tracking_inputs = torch.cat([torch.cat(b_s), torch.cat(s1_s), torch.cat(s2_s)], dim=1)
+        return self.track(tracking_inputs)
+
+    def resolve_action(self, buffer, stack, buffer_size, stack_size, act, time_stamp, ops_left):
+        # must pad
+        if buffer_size == 0 and stack_size == 1:
+            raise Exception("Should have immediately returned PAD inside main loop.")
+
+        if buffer_size == 0:
+            return REDUCE, True
+
+        if stack_size < 2:
+            return SHIFT, True
+
+        # must reduce
+        if stack_size >= ops_left:
+            return REDUCE, True
+
+        # must shift
+        if stack_size < 2:
+            return SHIFT, True
+
+        return act, False
+
+    def forward(self, sentence, transitions, num_ops, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
-
         out = self.word(sentence) # batch, |sent|, h * 2
         if self.args.dropout_rate_input > 0:
             out = self.dropout(out) # batch, |sent|, h * 2
         # batch normalization and dropout
 
+        if not self.args.no_batch_norm:
+            out = out.transpose(1, 2).contiguous()
+            out = self.batch_norm1(out) # batch,  h * 2, |sent| (Normalizes batch * |sent| slices for each feature
+            out = out.transpose(1, 2)
+
+
         (h_sent, c_sent) = torch.chunk(out, 2, 2)  # ((batch, |sent|, h), (batch, |sent|, h))
-        buffer_batch = [Buffer(h_s, c_s) for (h_s, c_s)
-            in list(zip(
+        buffer_batch = [Buffer(h_s, c_s, self.args) for h_s, c_s
+            in zip(
                 list(torch.split(h_sent, 1, 0)),
-                list(torch.split(c_sent, 1, 0)))
+                list(torch.split(c_sent, 1, 0))
             )
         ]
 
-        stack_batch = [create_stack(self.args.hidden_size, self.args.continuous_stack) for _ in buffer_batch]
-        transitions_batch = [trans.squeeze(1) for trans
-            in list(torch.split(transitions, 1, 1))]
+        stack_batch = [
+            create_stack(self.args.hidden_size, self.args.continuous_stack)
+            for _ in buffer_batch
+        ]
 
-        batch_size = len(buffer_batch)
+        if self.args.tracking:
+            self.track.initialize_states(batch_size)
+        else:
+            assert transitions is not None
 
-        for time_stamp in range(len(transitions_batch)):
+        if transitions is None:
+            num_transitions = (2 * sent_len) - 1
+        else:
+            transitions_batch = [trans.squeeze(1) for trans
+                in list(torch.split(transitions, 1, 1))]
+            num_transitions = len(transitions_batch)
+
+        lstm_actions, true_actions = [], []
+
+        for time_stamp in range(num_transitions):
+            ops_left = num_transitions - time_stamp
+
             reduce_ids = []
             reduce_lh, reduce_lc = [], []
             reduce_rh, reduce_rc = [], []
-            temp_trans = transitions_batch[time_stamp].data
+            reduce_valences = []
+            reduce_tracking_states = []
+
+            if self.args.tracking:
+                valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
+                _, pred_trans = valences.max(dim=1)
+                if self.training and self.args.teacher:
+                    temp_trans = transitions_batch[time_stamp]
+
+                    for b_id in range(batch_size):
+                        if temp_trans[b_id].data[0] > PAD:
+                            true_actions.append(temp_trans[b_id])
+                            lstm_actions.append(valences[b_id].unsqueeze(0))
+
+                    use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
+                    temp_trans = temp_trans.data if use_teacher else pred_trans.data
+                else:
+                    temp_trans = pred_trans.data
+            else:
+                valences = None
+                temp_trans = transitions_batch[time_stamp].data
 
             for b_id in range(batch_size):
-                act = temp_trans[b_id]
-
-                # TODO this will be probability of decision for unsupervised case
-                valence = Variable(torch.FloatTensor([1.0]))
-
-                if act == PAD:
+                stack_size, buffer_size = stack_batch[b_id].size(), buffer_batch[b_id].size()
+                # this sentence is done!
+                my_ops_left = num_ops[b_id] - time_stamp
+                if my_ops_left <= 0:
+                    # should coincide with teacher padding or else num_ops has a bug
+                    if self.training and self.args.teacher:
+                        assert temp_trans[b_id] == PAD
                     continue
+                else:
+                    act = temp_trans[b_id]
+                    # ensures it's a valid act according to state of buffer, batch, and timestamp
+                    if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
+                        act, act_ignored = self.resolve_action(buffer_batch[b_id],
+                            stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
 
-                if act == SHIFT:
-                    word = buffer_batch[b_id].pop()
-                    stack_batch[b_id].add(word, valence, time_stamp)
+                if self.args.tracking:
+                    # reduce, shift valence
+                    reduce_valence, shift_valence = valences[b_id]
+                    if self.args.continuous_stack:
+                        reduce_valence = reduce_valence.clone()
+                        shift_valence = shift_valence.clone()
+                else:
+                    reduce_valence, shift_valence = None, None
 
-                if act == REDUCE:
+                # 2 - REDUCE
+                if act == REDUCE or (self.args.continuous_stack and stack_size >= 2):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(valence)
+                    stack_batch[b_id].pop(reduce_valence)
 
                     l = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(valence)
+                    stack_batch[b_id].pop(reduce_valence)
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
+
+                    if self.args.tracking:
+                        reduce_valences.append(reduce_valence)
+                        reduce_tracking_states.append(tracking_state[b_id].unsqueeze(0))
+
+                # 3 - SHIFT
+                if act == SHIFT or (self.args.continuous_stack and buffer_size > 0):
+                    word = buffer_batch[b_id].pop()
+                    stack_batch[b_id].add(word, shift_valence, time_stamp)
 
             if len(reduce_ids) > 0:
                 h_lefts = torch.cat(reduce_lh)
                 c_lefts = torch.cat(reduce_lc)
                 h_rights = torch.cat(reduce_rh)
                 c_rights = torch.cat(reduce_rc)
-                h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
+
+                if self.args.tracking:
+                    e_out = torch.cat(reduce_tracking_states)
+                    h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights), e_out)
+                else:
+                    h_outs, c_outs = self.reduce((h_lefts, c_lefts), (h_rights, c_rights))
+
                 for i, state in enumerate(zip(h_outs, c_outs)):
-                    stack_batch[reduce_ids[i]].add(state, valence)
+                    reduce_valence = reduce_valences[i] if self.args.tracking else None
+                    stack_batch[reduce_ids[i]].add(state, reduce_valence)
 
         outputs = []
-        for stack in stack_batch:
+        for (i, stack) in enumerate(stack_batch):
             if not self.args.continuous_stack:
-                assert stack.size() == 1
+                if not stack.size() == 1:
+                    print("Stack size is %d.  Should be 1" % stack.size())
+                    assert stack.size() == 1
+            top_h = stack.peek()[0]
+            outputs.append(top_h)
 
-            outputs.append(stack.peek()[0])
-
+        if len(true_actions) > 0 and self.training:
+            return torch.cat(outputs), torch.cat(true_actions), torch.cat(lstm_actions)
         return torch.cat(outputs)
