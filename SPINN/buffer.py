@@ -3,10 +3,10 @@ from torch.autograd import Variable
 
 class Buffer():
     def __init__(self, h_s, c_s, args):
-        self.states = zip(
+        self.states = list(zip(
             reversed(list(torch.split(h_s.squeeze(0), 1, 0))),
             reversed(list(torch.split(c_s.squeeze(0), 1, 0)))
-        )
+        ))
 
         self.args = args
 
