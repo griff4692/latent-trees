@@ -22,11 +22,11 @@ class SNLIClassifier(nn.Module):
         for i in range(self.args.snli_num_h_layers):
             input_dim = 4 * self.args.hidden_size if i == 0 else self.args.snli_h_dim
             out_dim = self.args.snli_h_dim
-            self.mlp.append(cudify(args, nn.Linear(input_dim, out_dim)))
-            HeKaimingInitializer(self.mlp[-1].weight)
+            self.mlp.append(cudify(self.args, nn.Linear(input_dim, out_dim)))
+            HeKaimingInitializer(self.mlp[-1].weight, self.args.gpu > -1)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
-        HeKaimingInitializer(self.output.weight)
+        HeKaimingInitializer(self.output.weight, self.args.gpu > -1)
         self.spinn = SPINN(self.args)
 
     def set_weight(self, weight):

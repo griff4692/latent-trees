@@ -17,7 +17,7 @@ class SPINN(nn.Module):
         self.batch_norm1 = nn.BatchNorm1d(self.args.hidden_size * 2)
 
         self.word = nn.Linear(self.args.embed_dim, self.args.hidden_size * 2)
-        self.reduce = Reduce(self.args.hidden_size)
+        self.reduce = Reduce(self.args)
 
         self.track = None
         if self.args.tracking:
