@@ -8,7 +8,7 @@ OVERWRITE = True
 def gen_mini():
     data_dir = '.data/snli/snli_1.0'
 
-    names = ['clean_train', 'dev', 'test']
+    names = ['clean_train', 'clean_dev', 'clean_test']
 
     for name in names:
         source = 'snli_1.0_%s.jsonl' % name
@@ -19,7 +19,6 @@ def gen_mini():
 
         if os.path.exists(dest_file) and not OVERWRITE:
             continue
-
         data = open(source_file, 'r').readlines()
         truncated_data = data[:MINI_SIZE]
 
@@ -27,9 +26,9 @@ def gen_mini():
         for pt in truncated_data:
             dest_fd.write(pt)
 
-def remove_train_unk():
-    source_file = '.data/snli/snli_1.0/snli_1.0_train.jsonl'
-    dest_file = '.data/snli/snli_1.0/snli_1.0_clean_train.jsonl'
+def remove_train_unk(tag):
+    source_file = '.data/snli/snli_1.0/snli_1.0_' +tag+'.jsonl'
+    dest_file = '.data/snli/snli_1.0/snli_1.0_clean_'+tag+'.jsonl'
 
     if os.path.exists(dest_file) and not OVERWRITE:
         return

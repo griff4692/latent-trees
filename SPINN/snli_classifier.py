@@ -13,20 +13,14 @@ class SNLIClassifier(nn.Module):
         self.relu = nn.ReLU()
 
         self.layer_norm_mlp_input = LayerNormalization(2 * self.args.hidden_size)
-        self.layer_norm_mlp_hidden = LayerNormalization(self.args.snli_h_dim)
+        self.layer_norm_mlp2_hidden = LayerNormalization(self.args.snli_h_dim)
+        self.layer_norm_mlp1_hidden = LayerNormalization(self.args.snli_h_dim)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_classify)
-
-        self.mlp = []
-        for i in range(self.args.snli_num_h_layers):
-            input_dim = 2 * self.args.hidden_size if i == 0 else self.args.snli_h_dim
-            out_dim = self.args.snli_h_dim
-            if args.gpu > -1:
-                self.mlp.append(nn.Linear(input_dim, out_dim).cuda())
-                HeKaimingInitializer(self.mlp[-1].weight, True)
-            else:
-                self.mlp.append(nn.Linear(input_dim, out_dim))
-                HeKaimingInitializer(self.mlp[-1].weight)
+        self.mlp1 = nn.Linear(4 * self.args.hidden_size // 2, self.args.snli_h_dim)
+        HeKaimingInitializer(self.mlp1.weight)
+        self.mlp2 = nn.Linear(self.args.snli_h_dim, self.args.snli_h_dim)
+        HeKaimingInitializer(self.mlp2.weight)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
         HeKaimingInitializer(self.output.weight)
@@ -57,14 +51,16 @@ class SNLIClassifier(nn.Module):
 
         if self.args.dropout_rate_classify > 0:
             features = self.dropout(features)
+                    # ReLu plus weight matrix
+        features = self.relu(self.mlp1(features))
+        features = self.layer_norm_mlp1_hidden(features)
+        # dropout
+        if self.args.dropout_rate_classify > 0:
+            features = self.dropout(features)
 
-        for (i, layer) in enumerate(self.mlp):
-            # ReLu plus weight matrix
-            features = self.relu(layer(features))
-            # batch norm
-            features = self.layer_norm_mlp_hidden(features)
-            # dropout
-            if self.args.dropout_rate_classify > 0:
-                features = self.dropout(features)
-
+        features = self.relu(self.mlp2(features))
+        features = self.layer_norm_mlp2_hidden(features)
+        # dropout
+        if self.args.dropout_rate_classify > 0:
+            features = self.dropout(features)
         return self.output(features)

@@ -13,12 +13,16 @@ def prepare_snli_batches(args):
     data_dir = '.data/snli/snli_1.0/'
 
     train_path = 'snli_1.0_clean_train.jsonl'
+    test_path = 'snli_1.0_clean_test.jsonl'
+    validation_path = 'snli_1.0_clean_dev.jsonl'
     debug_train = 'snli_1.0_mini_clean_train.jsonl'
-    debug_validation = 'snli_1.0_mini_dev.jsonl'
-    debug_test = 'snli_1.0_mini_test.jsonl'
+    debug_validation = 'snli_1.0_mini_clean_dev.jsonl'
+    debug_test = 'snli_1.0_mini_clean_test.jsonl'
 
     if not os.path.exists(os.path.join(data_dir, train_path)):
-        remove_train_unk()
+        remove_train_unk('train')
+        remove_train_unk('test')
+        remove_train_unk('dev')
     if args.debug:
         if not os.path.exists(os.path.join(data_dir, debug_train)):
             gen_mini()
@@ -28,7 +32,7 @@ def prepare_snli_batches(args):
             train=debug_train, validation=debug_validation, test=debug_test)
     else:
         print ("Train Path ", train_path)
-        train, dev, test = datasets.SNLI.splits(inputs, answers, transitions, train=train_path)
+        train, dev, test = datasets.SNLI.splits(inputs, answers, transitions, train=train_path, validation=validation_path, test=test_path)
 
     inputs.build_vocab(train, dev, test)
     answers.build_vocab(train)

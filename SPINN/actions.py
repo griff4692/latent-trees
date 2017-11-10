@@ -51,7 +51,7 @@ class Reduce(nn.Module):
         (hl, cl) = sl
         (hr, cr) = sr
         input_lstm_left = self.compose_left(self.left_ln(hl))
-        input_lstm_right = self.compose_right(self.right_ln(hl))
+        input_lstm_right = self.compose_right(self.right_ln(hr))
         input_lstm = input_lstm_right + input_lstm_left
 
         output = self.lstm(input_lstm, cl, cr)
