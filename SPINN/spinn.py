@@ -18,7 +18,7 @@ class SPINN(nn.Module):
 
         self.word = nn.Linear(self.args.embed_dim, self.args.hidden_size * 2)
         self.reduce = Reduce(self.args)
-        
+
         self.track = None
         if self.args.tracking:
             self.track = TrackingLSTM(self.args)
@@ -29,7 +29,12 @@ class SPINN(nn.Module):
             b = buffer[b_id].peek()[0]
             s1, s2 = stack[b_id].peek_two()
             b_s.append(b); s1_s.append(s1[0]); s2_s.append(s2[0])
-        tracking_inputs = torch.cat([torch.cat(b_s), torch.cat(s1_s), torch.cat(s2_s)], dim=1)
+
+        bs_cat = torch.cat(b_s)
+        s1s_cat = torch.cat(s1_s)
+        s2s_cat = torch.cat(s2_s)
+
+        tracking_inputs = torch.cat([bs_cat, s1s_cat, s2s_cat], dim=1)
         return self.track(tracking_inputs)
 
     def resolve_action(self, buffer, stack, buffer_size, stack_size, act, time_stamp, ops_left):
@@ -75,7 +80,7 @@ class SPINN(nn.Module):
         ]
 
         stack_batch = [
-            create_stack(self.args.hidden_size, self.args.continuous_stack)
+            create_stack(self.args)
             for _ in buffer_batch
         ]
 

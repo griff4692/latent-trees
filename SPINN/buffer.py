@@ -1,5 +1,6 @@
 import torch
 from torch.autograd import Variable
+from utils import cudify
 
 class Buffer():
     def __init__(self, h_s, c_s, args):
@@ -11,8 +12,8 @@ class Buffer():
         self.args = args
 
         self.zero_state = (
-            Variable(torch.zeros(1, self.args.hidden_size)),
-            Variable(torch.zeros(1, self.args.hidden_size))
+            cudify(self.args, Variable(torch.zeros(1, self.args.hidden_size), requires_grad=False)),
+            cudify(self.args, Variable(torch.zeros(1, self.args.hidden_size), requires_grad=False))
         )
 
     def pop(self):

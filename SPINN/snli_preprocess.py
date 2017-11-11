@@ -26,9 +26,9 @@ def gen_mini():
         for pt in truncated_data:
             dest_fd.write(pt)
 
-def remove_train_unk(tag):
-    source_file = '.data/snli/snli_1.0/snli_1.0_' +tag+'.jsonl'
-    dest_file = '.data/snli/snli_1.0/snli_1.0_clean_'+tag+'.jsonl'
+def remove_unk(tag):
+    source_file = '.data/snli/snli_1.0/snli_1.0_' + tag + '.jsonl'
+    dest_file = '.data/snli/snli_1.0/snli_1.0_clean_' + tag + '.jsonl'
 
     if os.path.exists(dest_file) and not OVERWRITE:
         return

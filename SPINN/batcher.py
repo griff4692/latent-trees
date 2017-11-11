@@ -4,7 +4,7 @@ import torchtext.vocab as vocab
 import os
 import sys
 
-from snli_preprocess import gen_mini, remove_train_unk, MINI_SIZE
+from snli_preprocess import gen_mini, remove_unk, MINI_SIZE
 
 def resolve_data_bug(data_dir):
     if os.path.exists(os.path.join(data_dir, 'snli_1.0_clean_train.jsonl')):
@@ -18,19 +18,26 @@ def prepare_snli_batches(args):
     answers = data.Field(sequential=False)
     data_dir = '.data/snli/snli_1.0/'
 
-
     pre = resolve_data_bug(data_dir)
     train_path = pre + 'clean_train.jsonl'
+    validation_path = pre + 'clean_dev.jsonl'
+    test_path = pre + 'clean_test.jsonl'
+
     debug_train = pre + 'mini_clean_train.jsonl'
-    debug_validation = pre + 'mini_dev.jsonl'
-    debug_test = pre + 'mini_test.jsonl'
+    debug_validation = pre + 'mini_clean_dev.jsonl'
+    debug_test = pre + 'mini_clean_test.jsonl'
 
     if not os.path.exists(os.path.join(data_dir, train_path)):
-        remove_train_unk('train')
-        remove_train_unk('test')
-        remove_train_unk('dev')
+        remove_unk('train')
+
+    if not os.path.exists(os.path.join(data_dir, test_path)):
+        remove_unk('test')
+
+    if not os.path.exists(os.path.join(data_dir, validation_path)):
+        remove_unk('dev')
+
     if args.debug:
-        if not os.path.exists(os.path.join(data_dir, debug_train)):
+        if not os.path.exists(os.path.join(data_dir, debug_train)) or not os.path.exists(os.path.join(data_dir, debug_validation)):
             gen_mini()
 
         print ("Using first %d examples for development purposes..." % MINI_SIZE)

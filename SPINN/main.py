@@ -41,7 +41,6 @@ def get_l2_loss(model, l2_lambda):
             loss += l2_lambda * torch.sum(torch.pow(w, 2))
     return loss
 
-
 def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
     sent1, sent2 = add_num_ops_and_shift_acts(args, sent1), \
         add_num_ops_and_shift_acts(args, sent2)
@@ -55,7 +54,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     total_loss = loss(logits, y_val)
 
     if sent_pred is not None and sent_true is not None:
-        total_loss += loss.forward(sent_pred, sent_true)
+        total_loss += args.teacher_train_lambda * loss.forward(sent_pred, sent_true)
 
     total_loss += get_l2_loss(model, 1e-5)
 
@@ -188,11 +187,12 @@ if __name__=='__main__':
     parser.add_argument('-teacher', action='store_true', default=False)
     parser.add_argument('--force_decay', type=float, default=1.0)
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
+    parser.add_argument('--teacher_train_lambda', type=float, default=1.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
 
     args = parser.parse_args()
 
     if args.debug:
-        args.eval_freq = 100
+        args.eval_freq = 1000
 
     if args.continuous_stack:
         assert args.tracking

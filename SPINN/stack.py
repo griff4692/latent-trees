@@ -4,18 +4,19 @@ import numpy as np
 from random import random
 import abc, six
 from abc import ABCMeta
+from utils import cudify
 
-def create_stack(dim, use_continuous=False):
-    if use_continuous:
-        return ContinuousStack(dim)
+def create_stack(args):
+    if args.continuous_stack:
+        return ContinuousStack(args)
     else:
-        return DefaultStack(dim)
+        return DefaultStack(args)
 
 @six.add_metaclass(ABCMeta)
 class BaseStack:
     def zero_state(self):
-        return Variable(torch.zeros(1, self.dim), requires_grad=False),
-        Variable(torch.zeros(1, self.dim), requires_grad=False)
+        return cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
+        cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False))
 
     @abc.abstractmethod
     def add(self, state, valence, id=0):
@@ -35,9 +36,10 @@ class BaseStack:
 
 class DefaultStack(BaseStack):
     # TODO Figure out Thin Stack.
-    def __init__(self, dim):
+    def __init__(self, args):
+        self.args = args
         self.states = []
-        self.dim = dim
+        self.dim = args.hidden_size
 
     def add(self, state, valence, id=0):
         self.states.append(state)
@@ -67,14 +69,15 @@ class DefaultStack(BaseStack):
         return len(self.states)
 
 class ContinuousStack(BaseStack):
-    def __init__(self, dim):
-        self.dim = dim
+    def __init__(self, args):
+        self.args = args
+        self.dim = self.args.hidden_size
         self.valences = None
         self.hs = None
         self.cs = None
 
     def one_valence(self):
-        return Variable(torch.FloatTensor([1]), requires_grad=False)
+        return cudify(self.args, Variable(torch.FloatTensor([1]), requires_grad=False))
 
     def add(self, state, valence, id=0):
         if self.valences is None:
@@ -94,7 +97,7 @@ class ContinuousStack(BaseStack):
 
         if flavor == 'peek':
             # don't overwrite
-            read_mask = Variable(torch.zeros(size, 1))
+            read_mask = cudify(self.args, Variable(torch.zeros(size, 1)))
 
         # top of the stack
         idx = size - 1

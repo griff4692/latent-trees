@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from utils import cudify
 
 class TrackingLSTM(nn.Module):
     def __init__(self, args):
@@ -19,8 +20,8 @@ class TrackingLSTM(nn.Module):
 
 
     def initialize_states(self, batch_size):
-        self.h = Variable(torch.zeros(batch_size, self.args.hidden_size))
-        self.c = Variable(torch.zeros(batch_size, self.args.hidden_size))
+        self.h = cudify(self.args, Variable(torch.zeros(batch_size, self.args.hidden_size)))
+        self.c = cudify(self.args, Variable(torch.zeros(batch_size, self.args.hidden_size)))
 
     def lstm(self, inputs, predict=True):
         h = self.state_weights(self.h) # batch, 4 * dim
