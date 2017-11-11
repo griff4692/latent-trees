@@ -10,20 +10,22 @@ from constants import PAD, SHIFT, REDUCE
 import sys
 from utils import render_args, cudify
 
-def add_num_ops_and_shift_acts(sent):
+def add_num_ops_and_shift_acts(args, sent):
     trans = sent[1] - 2
     max_ops = trans.size()[1]
-
     # find number of padding actions and subtract from max ops row-wise
-    mask = trans.data.numpy().copy()
+    if args.gpu > -1:
+        mask = trans.data.cpu().numpy().copy()
+    else:
+        mask = trans.data.numpy().copy()
     mask[mask > 0] = 0
     num_ops = max_ops + mask.sum(axis=1)
 
     return (sent[0], trans, num_ops)
 
 def predict(args, model, sent1, sent2, cuda=False):
-    sent1, sent2 = add_num_ops_and_shift_acts(sent1), \
-        add_num_ops_and_shift_acts(sent2)
+    sent1, sent2 = add_num_ops_and_shift_acts(args, sent1), \
+        add_num_ops_and_shift_acts(args, sent2)
 
     model.eval()
     output, _, _ = model(sent1, sent2, None)
@@ -41,8 +43,8 @@ def get_l2_loss(model, l2_lambda):
 
 
 def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
-    sent1, sent2 = add_num_ops_and_shift_acts(sent1), \
-        add_num_ops_and_shift_acts(sent2)
+    sent1, sent2 = add_num_ops_and_shift_acts(args, sent1), \
+        add_num_ops_and_shift_acts(args, sent2)
 
     # Reset gradient
     optimizer.zero_grad()
@@ -188,6 +190,9 @@ if __name__=='__main__':
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
 
     args = parser.parse_args()
+
+    if args.debug:
+        args.eval_freq = 100
 
     if args.continuous_stack:
         assert args.tracking

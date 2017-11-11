@@ -27,7 +27,7 @@ class SNLIClassifier(nn.Module):
             HeKaimingInitializer(self.mlp[-1].weight, self.args.gpu > -1)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
-        HeKaimingInitializer(self.output.weight, self.args.gpu > -1)
+        HeKaimingInitializer(self.output.weight)
         self.spinn = SPINN(self.args)
 
     def set_weight(self, weight):

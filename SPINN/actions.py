@@ -35,9 +35,9 @@ class Reduce(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
         self.compose_left = nn.Linear(self.args.hidden_size, 5 * self.args.hidden_size)
-        HeKaimingInitializer(self.compose_left.weight, self.args.gpu > -1)
+        HeKaimingInitializer(self.compose_left.weight)
         self.compose_right = nn.Linear(self.args.hidden_size, 5 * self.args.hidden_size, bias=False)
-        HeKaimingInitializer(self.compose_right.weight, self.args.gpu > -1)
+        HeKaimingInitializer(self.compose_right.weight)
 
         self.compose_e = nn.Linear(self.args.hidden_size, 5 * self.args.hidden_size, bias=False)
 
