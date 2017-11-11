@@ -54,7 +54,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     total_loss = loss(logits, y_val)
 
     if sent_pred is not None and sent_true is not None:
-        total_loss += args.teacher_train_lambda * loss.forward(sent_pred, sent_true)
+        total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
 
     total_loss += get_l2_loss(model, 1e-5)
 
@@ -94,6 +94,8 @@ def train(args):
     teacher_prob = 1.0
 
     for epoch in range(args.epochs):
+        epoch_interp = float(args.epochs - epoch) / float(args.epochs)
+        args.teach_lambda = (epoch_interp * args.teach_lambda_init) + ((1.0 - epoch_interp) * args.teach_lambda_end)
         train_iter.init_epoch()
         cost = 0
         for batch_idx, batch in enumerate(train_iter):
@@ -187,7 +189,8 @@ if __name__=='__main__':
     parser.add_argument('-teacher', action='store_true', default=False)
     parser.add_argument('--force_decay', type=float, default=1.0)
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
-    parser.add_argument('--teacher_train_lambda', type=float, default=1.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
+    parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
+    parser.add_argument('--teach_lambda_end', type=float, default=0.5)
 
     args = parser.parse_args()
 

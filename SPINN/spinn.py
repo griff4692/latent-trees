@@ -199,5 +199,5 @@ class SPINN(nn.Module):
             outputs.append(top_h)
 
         if len(true_actions) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_actions), torch.cat(lstm_actions)
+            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions))
         return torch.cat(outputs)
