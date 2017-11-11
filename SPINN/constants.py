@@ -1,3 +1,3 @@
-PAD = 1
-REDUCE = 2
-SHIFT = 3
+PAD = -1
+REDUCE = 0
+SHIFT = 1
