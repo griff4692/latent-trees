@@ -148,11 +148,11 @@ class SPINN(nn.Module):
                 else:
                     act = temp_trans[b_id]
 
-                    # TODO this is for unsupervised case.  Debug when get to it
                     # ensures it's a valid act according to state of buffer, batch, and timestamp
-                    # if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
-                    #     act, act_ignored = self.resolve_action(buffer_batch[b_id],
-                    #         stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
+                    # safe check actions if not using teacher forcing... or using teacher forcing but in evaluation
+                    if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
+                        act, act_ignored = self.resolve_action(buffer_batch[b_id],
+                            stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
 
                 if self.args.tracking:
                     # use teacher valences over predicted valences
@@ -163,8 +163,11 @@ class SPINN(nn.Module):
                 else:
                     reduce_valence, shift_valence = None, None
 
+                no_action = True
+
                 # 2 - REDUCE
-                if act == REDUCE: #  or (self.args.continuous_stack and not self.args.teacher):
+                if act == REDUCE or (self.args.continuous_stack and not self.args.teacher and stack_size >= 2):
+                    no_action = False
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
@@ -181,9 +184,13 @@ class SPINN(nn.Module):
                         reduce_tracking_states.append(tracking_state[b_id].unsqueeze(0))
 
                 # 3 - SHIFT
-                if act == SHIFT or (self.args.continuous_stack and not self.args.teacher):
+                if act == SHIFT or (self.args.continuous_stack and not self.args.teacher and buffer_size > 0):
+                    no_action = False
                     word = buffer_batch[b_id].pop()
                     stack_batch[b_id].add(word, shift_valence, time_stamp)
+
+                if no_action:
+                    print("\n\nWarning: Didn't choose an action.  Look for a bug!  Attempted %d action but was denied!" % act)
 
             if len(reduce_ids) > 0:
                 h_lefts = torch.cat(reduce_lh)
