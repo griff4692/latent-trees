@@ -7,6 +7,8 @@ from buffer import Buffer
 from stack import create_stack
 from tracking_lstm import TrackingLSTM
 from random import random
+from utils import cudify
+import math
 
 class SPINN(nn.Module):
     def __init__(self, args):
@@ -60,7 +62,8 @@ class SPINN(nn.Module):
 
     def forward(self, sentence, transitions, num_ops, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
-        out = self.word(sentence) # batch, |sent|, h * 2
+        out = self.word(sentence) # batch, |sent|, h * 2s
+
         if self.args.dropout_rate_input > 0:
             out = self.dropout(out) # batch, |sent|, h * 2
         # batch normalization and dropout
@@ -72,6 +75,7 @@ class SPINN(nn.Module):
 
 
         (h_sent, c_sent) = torch.chunk(out, 2, 2)  # ((batch, |sent|, h), (batch, |sent|, h))
+
         buffer_batch = [Buffer(h_s, c_s, self.args) for h_s, c_s
             in zip(
                 list(torch.split(h_sent, 1, 0)),
@@ -106,11 +110,15 @@ class SPINN(nn.Module):
             reduce_rh, reduce_rc = [], []
             reduce_valences = []
             reduce_tracking_states = []
-
+            teacher_valences = None
             if self.args.tracking:
                 valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
                 _, pred_trans = valences.max(dim=1)
                 if self.training and self.args.teacher:
+                    use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
+                    if use_teacher and self.args.continuous_stack:
+                        teacher_valences = cudify(self.args, Variable(torch.zeros(valences.size()), requires_grad=False))
+
                     temp_trans = transitions_batch[time_stamp]
 
                     for b_id in range(batch_size):
@@ -118,7 +126,9 @@ class SPINN(nn.Module):
                             true_actions.append(temp_trans[b_id])
                             lstm_actions.append(valences[b_id].unsqueeze(0))
 
-                    use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
+                            if teacher_valences is not None:
+                                teacher_valences[b_id, temp_trans[b_id].data[0]] = 1.0
+
                     temp_trans = temp_trans.data if use_teacher else pred_trans.data
                 else:
                     temp_trans = pred_trans.data
@@ -137,22 +147,24 @@ class SPINN(nn.Module):
                     continue
                 else:
                     act = temp_trans[b_id]
+
+                    # TODO this is for unsupervised case.  Debug when get to it
                     # ensures it's a valid act according to state of buffer, batch, and timestamp
-                    if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
-                        act, act_ignored = self.resolve_action(buffer_batch[b_id],
-                            stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
+                    # if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
+                    #     act, act_ignored = self.resolve_action(buffer_batch[b_id],
+                    #         stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
 
                 if self.args.tracking:
-                    # reduce, shift valence
-                    reduce_valence, shift_valence = valences[b_id]
-                    if self.args.continuous_stack:
-                        reduce_valence = reduce_valence.clone()
-                        shift_valence = shift_valence.clone()
+                    # use teacher valences over predicted valences
+                    if teacher_valences is not None:
+                        reduce_valence, shift_valence = teacher_valences[b_id]
+                    else:
+                        reduce_valence, shift_valence = valences[b_id]
                 else:
                     reduce_valence, shift_valence = None, None
 
                 # 2 - REDUCE
-                if act == REDUCE or (self.args.continuous_stack and stack_size >= 2):
+                if act == REDUCE: #  or (self.args.continuous_stack and not self.args.teacher):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
@@ -169,7 +181,7 @@ class SPINN(nn.Module):
                         reduce_tracking_states.append(tracking_state[b_id].unsqueeze(0))
 
                 # 3 - SHIFT
-                if act == SHIFT or (self.args.continuous_stack and buffer_size > 0):
+                if act == SHIFT or (self.args.continuous_stack and not self.args.teacher):
                     word = buffer_batch[b_id].pop()
                     stack_batch[b_id].add(word, shift_valence, time_stamp)
 

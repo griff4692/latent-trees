@@ -18,7 +18,7 @@ class SNLIClassifier(nn.Module):
         self.layer_norm_mlp2_hidden = LayerNormalization(self.args.snli_h_dim)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_classify)
-        
+
         self.mlp1 = nn.Linear(4 * self.args.hidden_size, self.args.snli_h_dim)
         HeKaimingInitializer(self.mlp1.weight)
         self.mlp2 = nn.Linear(self.args.snli_h_dim, self.args.snli_h_dim)
@@ -41,6 +41,7 @@ class SNLIClassifier(nn.Module):
     def forward(self, hypothesis, premise, teacher_prob):
         hyp_embed = self.embed(hypothesis[0])
         prem_embed = self.embed(premise[0])
+
         if not self.args.teacher or not self.training:
             hyp_trans, prem_trans = hypothesis[1], premise[1]
             if self.args.tracking:
@@ -60,18 +61,18 @@ class SNLIClassifier(nn.Module):
 
         if self.args.dropout_rate_classify > 0:
             features = self.dropout(features)
-        
+
         # ReLu plus weight matrix
         features = self.relu(self.mlp1(features))
         features = self.layer_norm_mlp1_hidden(features)
-        
+
         # dropout
         if self.args.dropout_rate_classify > 0:
             features = self.dropout(features)
 
         features = self.relu(self.mlp2(features))
         features = self.layer_norm_mlp2_hidden(features)
-    
+
         if self.args.dropout_rate_classify > 0:
             features = self.dropout(features)
 

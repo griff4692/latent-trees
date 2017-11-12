@@ -4,6 +4,7 @@ import numpy as np
 from random import random
 import abc, six
 from abc import ABCMeta
+import math
 from utils import cudify
 
 def create_stack(args):
@@ -15,8 +16,8 @@ def create_stack(args):
 @six.add_metaclass(ABCMeta)
 class BaseStack:
     def zero_state(self):
-        return cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
-        cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False))
+        return (cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
+        cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)))
 
     @abc.abstractmethod
     def add(self, state, valence, id=0):
@@ -62,9 +63,6 @@ class DefaultStack(BaseStack):
 
         return self.states[-1], self.states[-2]
 
-        second_top = self.states[-2]
-        return second_top
-
     def size(self):
         return len(self.states)
 
@@ -76,65 +74,110 @@ class ContinuousStack(BaseStack):
         self.hs = None
         self.cs = None
 
+        self.other_stack = DefaultStack(args)
+
     def one_valence(self):
         return cudify(self.args, Variable(torch.FloatTensor([1]), requires_grad=False))
 
     def add(self, state, valence, id=0):
+        assert len(state) == 2
+        self.other_stack.add(state, valence, id)
+        hs, cs = state
+
+        # TODO this is defensive programming but may not be necessary
+        valence = valence.clone()
+
         if self.valences is None:
             self.valences = valence
-            self.hs, self.cs = state
+            self.hs, self.cs = hs, cs
         else:
             if not valence.size()[0] == 1:
                 raise Exception("Adding more than one valence at a time.")
 
             self.valences = torch.cat([self.valences, valence], 0)
-            self.hs = torch.cat([self.hs, state[0]], 0)
-            self.cs = torch.cat([self.cs, state[1]], 0)
+            self.hs = torch.cat([self.hs, hs], 0)
+            self.cs = torch.cat([self.cs, cs], 0)
 
-    def reduce(self, flavor, mass_remaining):
+
+    def reduce(self, mass_remaining):
+        mass_remaining = cudify(self.args, Variable(torch.FloatTensor([mass_remaining])))
         size = self.size()
-        coeff = 1.0 if flavor == 'restore' else -1.0
-
-        if flavor == 'peek':
-            # don't overwrite
-            read_mask = cudify(self.args, Variable(torch.zeros(size, 1)))
-
-        # top of the stack
+        read_mask = cudify(self.args, Variable(torch.zeros(size, 1), requires_grad=False))
         idx = size - 1
         while mass_remaining.data[0] > 0.0 and idx >= 0:
-            mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
-            if flavor == 'peek':
-                read_mask[idx] = mass_coeff.clone()
+            mass_remaining_data = mass_remaining.data[0]
+            this_valence = self.valences[idx].data[0]
+            if mass_remaining_data - this_valence >= 1.0:
+                mass_coeff = self.valences[idx]
+            elif mass_remaining_data > 1.0 and mass_remaining_data - this_valence < 1.0:
+                skip_mass = mass_remaining - 1.0
+                mass_coeff = self.valences[idx] - skip_mass
+                read_mask[idx] = mass_coeff
             else:
-                self.valences[idx] = self.valences[idx] + (coeff * mass_coeff.clone())
+                mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
+                read_mask[idx] = mass_coeff
 
             mass_remaining -= mass_coeff
             idx -= 1
 
-        if flavor == 'peek':
-            reduced_hs = torch.mul(read_mask, self.hs).sum(0, keepdim=True)
-            reduced_cs = torch.mul(read_mask, self.cs).sum(0, keepdim=True)
-            return reduced_hs, reduced_hs
+        reduced_hs = torch.mul(read_mask, self.hs).sum(0, keepdim=True)
+        reduced_cs = torch.mul(read_mask, self.cs).sum(0, keepdim=True)
+        return reduced_hs, reduced_cs
 
     def peek(self):
+        val = self.other_stack.peek()
+
         if self.size() == 0:
             return self.zero_state()
 
-        return self.reduce('peek', self.one_valence())
+        return self.reduce(1.0)
 
     def peek_two(self):
         if self.size() == 0:
-            return self.zero_state(), self.zero_state()
+            peek1 = self.zero_state()
+            peek2 = self.zero_state()
+        else:
+            peek1 = self.reduce(1.0)
+            peek2 = self.reduce(2.0)
 
-        top1 = self.reduce('peek', self.one_valence())
+        p1, p2 = self.other_stack.peek_two()
 
-        # temporarily reduce mass
-        self.reduce('pop', self.one_valence())
-        top2 = self.reduce('peek', self.one_valence())
-        # restore mass you temporarily took off
-        self.reduce('restore', self.one_valence())
+        if not np.all(peek1[0].data[0].numpy() == p1[0].data[0].numpy()):
+            print(peek1[0].data[0].numpy()[0:20])
+            print(p1[0].data[0].numpy()[0:20])
+            if self.valences is not None:
+                print(pre_valences.data.numpy())
+            print(self.valences.data.numpy())
+            print("1 error", self.size())
+            raise
 
-        return top1, top2
+        if not np.all(peek1[1].data[0].numpy() == p1[1].data[0].numpy()):
+            print("\n\n")
+            print(peek1[1].data[0].numpy())
+            print(p1[1].data[0].numpy())
+            print(peek1[1].data[0].numpy() - p1[1].data[0].numpy())
+
+            print("\n\n")
+            print(peek1[0].data[0])
+            print(p1[0].data[0])
+            print(peek1[0].data[0].numpy()-p1[0].data[0].numpy())
+            print("2 error", self.size())
+            raise
+
+        if not np.all(peek2[0].data[0].numpy() == p2[0].data[0].numpy()):
+            print(peek2[0].data[0].numpy())
+            print(p2[0].data[0].numpy())
+            print(peek2[0].data[0].numpy() - p2[0].data[0].numpy())
+            print(self.valences)
+            print("3 error", self.size())
+            raise
+
+        if not np.all(peek2[1].data[0].numpy() == p2[1].data[0].numpy()):
+            print(peek2[1].data[0].numpy() - p2[1].data[0].numpy())
+            print("4 error")
+            raise
+
+        return peek1, peek2
 
     def size(self):
         if self.valences is None:
@@ -143,7 +186,14 @@ class ContinuousStack(BaseStack):
         return self.valences.size()[0]
 
     def pop(self, valence):
-        self.reduce('pop', valence)
+        size = self.size()
+        idx = size - 1
+        mass_remaining = valence.clone()
+        while mass_remaining.data[0] > 0.0 and idx >= 0:
+            mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
+            self.valences[idx] = self.valences[idx] - mass_coeff
+            mass_remaining -= mass_coeff
+            idx -= 1
 
     def restore(self, valence):
         self.reduce('restore', valence)
