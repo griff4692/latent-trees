@@ -31,7 +31,7 @@ class TrackingLSTM(nn.Module):
         (i, f, o, g) = torch.chunk(x_plus_h, 4, 1) # (batch, dim) x 4
 
         c = torch.mul(self.c, self.sigmoid(f)) + torch.mul(self.sigmoid(i), self.tanh(g))
-        h = torch.mul(o, self.tanh(c))
+        h = torch.mul(self.sigmoid(o), self.tanh(c))
 
         self.h, self.c = h, c
 
