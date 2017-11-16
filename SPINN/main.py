@@ -53,7 +53,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
 
     total_loss = loss(logits, y_val)
 
-    if sent_pred is not None and sent_true is not None:
+    if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
 
     total_loss += get_l2_loss(model, 1e-5)
