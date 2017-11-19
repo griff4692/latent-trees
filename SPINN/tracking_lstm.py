@@ -14,14 +14,12 @@ class TrackingLSTM(nn.Module):
         # buffer, top 2 elements on stack
         self.state_weights = nn.Linear(self.args.hidden_size, 4 * self.args.hidden_size, bias=False)
         self.input_weights = nn.Linear(3 * self.args.hidden_size, 4 * self.args.hidden_size)
-
         # 2 actions: 0 (Reduce), 1 (Shift)
         self.prediction = nn.Linear(self.args.hidden_size, 2)
 
 
-    def initialize_states(self, batch_size):
-        self.h = cudify(self.args, Variable(torch.zeros(batch_size, self.args.hidden_size)))
-        self.c = cudify(self.args, Variable(torch.zeros(batch_size, self.args.hidden_size)))
+    def initialize_states(self, other_sent):
+        self.h, self.c = other_sent
 
     def lstm(self, inputs, predict=True):
         h = self.state_weights(self.h) # batch, 4 * dim
@@ -37,7 +35,8 @@ class TrackingLSTM(nn.Module):
 
         prediction = None
         if predict:
-            prediction = self.softmax(self.prediction(self.h))
+            nonlinear = self.sigmoid if self.args.continuous_stack else self.softmax
+            prediction = nonlinear(self.prediction(self.h))
         return (prediction, self.h)
 
 

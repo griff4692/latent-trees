@@ -15,10 +15,6 @@ def create_stack(args):
 
 @six.add_metaclass(ABCMeta)
 class BaseStack:
-    def zero_state(self):
-        return (cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
-        cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)))
-
     @abc.abstractmethod
     def add(self, state, valence, id=0):
         pass
@@ -41,6 +37,8 @@ class DefaultStack(BaseStack):
         self.args = args
         self.states = []
         self.dim = args.hidden_size
+        self.zero_state = (cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
+                cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)))
 
     def add(self, state, valence, id=0):
         self.states.append(state)
@@ -50,16 +48,16 @@ class DefaultStack(BaseStack):
 
     def peek(self):
         if self.size() == 0:
-            return self.zero_state()
+            return self.zero_state
 
         top = self.states[-1]
         return top
 
     def peek_two(self):
         if self.size() == 0:
-            return self.zero_state(), self.zero_state()
+            return self.zero_state, self.zero_state
         if self.size() == 1:
-            return self.states[-1], self.zero_state()
+            return self.states[-1], self.zero_state
 
         return self.states[-1], self.states[-2]
 
@@ -73,11 +71,12 @@ class ContinuousStack(BaseStack):
         self.valences = None
         self.hs = None
         self.cs = None
-
         self.num_push = 0
         self.num_pop = 0
 
-        self.other_stack = DefaultStack(args)
+        self.zero_state = (cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
+                cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)))
+
 
     def one_valence(self):
         return cudify(self.args, Variable(torch.FloatTensor([1]), requires_grad=False))
@@ -86,9 +85,6 @@ class ContinuousStack(BaseStack):
         assert len(state) == 2
 
         self.num_push += 1
-
-        # if self.args.debug:
-        #     self.other_stack.add(state, valence, id)
 
         hs, cs = state
 
@@ -134,56 +130,16 @@ class ContinuousStack(BaseStack):
 
     def peek(self):
         if self.size() == 0:
-            return self.zero_state()
+            return self.zero_state
         return self.reduce(1.0)
 
     def peek_two(self):
         if self.size() == 0:
-            peek1 = self.zero_state()
-            peek2 = self.zero_state()
+            peek1 = self.zero_state
+            peek2 = self.zero_state
         else:
             peek1 = self.reduce(1.0)
             peek2 = self.reduce(2.0)
-
-        # if self.args.debug and not is_training:
-        #     p1, p2 = self.other_stack.peek_two()
-        #
-        #     if not np.all(peek1[0].data[0].numpy() == p1[0].data[0].numpy()):
-        #         print(peek1[0].data[0].numpy()[0:20])
-        #         print(p1[0].data[0].numpy()[0:20])
-        #         print(self.valences.data.numpy())
-        #         print("1 error", self.size(), self.num_push, self.num_pop)
-        #         raise
-        #
-        #     if not np.all(peek1[1].data[0].numpy() == p1[1].data[0].numpy()):
-        #         print("\n\n")
-        #         print(peek1[1].data[0].numpy())
-        #         print(p1[1].data[0].numpy())
-        #         print(peek1[1].data[0].numpy() - p1[1].data[0].numpy())
-        #         print(self.valences.data.numpy())
-        #         print("2 error", self.size(), self.num_push, self.num_pop)
-        #
-        #         print("\n\n")
-        #         print(peek1[0].data[0])
-        #         print(p1[0].data[0])
-        #         print(peek1[0].data[0].numpy()-p1[0].data[0].numpy())
-        #         print(self.valences.data.numpy())
-        #         print("3 error", self.size(), self.num_push, self.num_pop)
-        #         raise
-        #
-        #     if not np.all(peek2[0].data[0].numpy() == p2[0].data[0].numpy()):
-        #         print(peek2[0].data[0].numpy())
-        #         print(p2[0].data[0].numpy())
-        #         print(peek2[0].data[0].numpy() - p2[0].data[0].numpy())
-        #         print(self.valences.data.numpy())
-        #         print("4 error", self.size(), self.num_push, self.num_pop)
-        #         raise
-        #
-        #     if not np.all(peek2[1].data[0].numpy() == p2[1].data[0].numpy()):
-        #         print(peek2[1].data[0].numpy() - p2[1].data[0].numpy())
-        #         print(self.valences.data.numpy())
-        #         print("5 error", self.size(), self.num_push, self.num_pop)
-        #         raise
 
         return peek1, peek2
 
@@ -191,14 +147,16 @@ class ContinuousStack(BaseStack):
         if self.valences is None:
             return 0
 
+        val_sum = self.valences.sum().data
+        if self.args.gpu > -1:
+            val_sum = val_sum.cpu()
+        if val_sum.numpy()[0] == 0.0:
+            return 0
+
         return self.valences.size()[0]
 
     def pop(self, valence):
         self.num_pop += 1
-
-        # if self.args.debug:
-        #     self.other_stack.pop(valence)
-
         size = self.size()
         idx = size - 1
         mass_remaining = valence.clone()

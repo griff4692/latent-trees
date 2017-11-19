@@ -20,7 +20,6 @@ def add_num_ops_and_shift_acts(args, sent):
         mask = trans.data.numpy().copy()
     mask[mask > 0] = 0
     num_ops = max_ops + mask.sum(axis=1)
-
     return (sent[0], trans, num_ops)
 
 def predict(args, model, sent1, sent2, cuda=False):
@@ -78,7 +77,7 @@ def train(args):
     print("Prepared Dataset...\n")
 
     sys.stdout.flush()
-    model = SNLIClassifier(args, len(inputs.vocab.stoi))
+    model = SNLIClassifier(args, inputs.vocab)
     model.set_weight(inputs.vocab.vectors.numpy())
 
     print("Instantiated Model...\n")
@@ -168,6 +167,8 @@ def train(args):
 
         teacher_prob *= args.force_decay
         print("Cost for Epoch #%d --> %.2f\n" % (epoch, cost))
+        torch.save(model, '../weights/model_%d.pth' % epoch)
+
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='SPINN dependency parse + SNLI Classifier arguments.')
