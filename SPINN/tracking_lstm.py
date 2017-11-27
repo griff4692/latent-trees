@@ -42,3 +42,40 @@ class TrackingLSTM(nn.Module):
 
     def forward(self, input, predict=True):
         return self.lstm(input, predict)
+
+class PolicyNetwork(nn.Module):
+    def __init__(self, args):
+        super(PolicyNetwork, self).__init__()
+        self.args = args
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax()
+        self.relu = nn.ReLU()
+
+        # buffer, top 2 elements on stack
+        self.input_weights = nn.Linear(3 * self.args.hidden_size, self.args.hidden_size)
+        # 2 actions: 0 (Reduce), 1 (Shift)
+        self.prediction = nn.Linear(self.args.hidden_size, 2)
+        self.actions = []
+        self.ignored = []
+
+
+    def network(self, inputs):
+        inputs_transform = self.input_weights(inputs)
+        x_plus_h = self.relu(inputs_transform)
+
+        prediction = self.softmax(self.prediction(x_plus_h))
+        return (prediction, None)
+
+    def reset(self):
+        self.actions = []
+        self.ignored = []
+
+    def add_action(self, action):
+        self.actions.append(action)
+
+    def add_ignored(self, ignored):
+        self.ignored.append(ignored)
+
+    def forward(self, input, predict=True):
+        return self.network(input)
+

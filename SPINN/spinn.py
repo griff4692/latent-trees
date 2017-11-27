@@ -5,7 +5,7 @@ from actions import Reduce
 from constants import PAD, SHIFT, REDUCE
 from buffer import Buffer
 from stack import create_stack
-from tracking_lstm import TrackingLSTM
+from tracking_lstm import TrackingLSTM, PolicyNetwork
 from random import random
 from utils import cudify
 import math
@@ -24,6 +24,8 @@ class SPINN(nn.Module):
         self.track = None
         if self.args.tracking:
             self.track = TrackingLSTM(self.args)
+        elif self.args.reinforce:
+            self.track = PolicyNetwork(self.args)
 
     def update_tracker(self, buffer, stack, batch_size):
         b_s, s1_s, s2_s = [], [], []
@@ -60,7 +62,16 @@ class SPINN(nn.Module):
 
         return act, False
 
-    def forward(self, sentence, transitions, num_ops, other_sent, teacher_prob):
+    def get_predictions(self, valence, sample = False):
+        if not sample:
+            _, pred_trans = valence.max(dim=1)
+        else:
+            pred_trans = torch.multinomial(valence, 1)
+            self.track.add_action(pred_trans)
+            pred_trans = pred_trans.squeeze(1)
+        return pred_trans
+
+    def forward(self, sentence, transitions, num_ops, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2s
 
@@ -87,10 +98,6 @@ class SPINN(nn.Module):
             for _ in buffer_batch
         ]
 
-        if self.args.tracking:
-            self.track.initialize_states(other_sent)
-        else:
-            assert transitions is not None
 
         if transitions is None:
             num_transitions = (2 * sent_len) - 1
@@ -100,6 +107,8 @@ class SPINN(nn.Module):
             num_transitions = len(transitions_batch)
 
         lstm_actions, true_actions = [], []
+        if self.args.reinforce:
+            self.track.reset()
 
         for time_stamp in range(num_transitions):
             ops_left = num_transitions - time_stamp
@@ -110,9 +119,13 @@ class SPINN(nn.Module):
             reduce_valences = []
             reduce_tracking_states = []
             teacher_valences = None
-            if self.args.tracking:
+            if self.args.tracking or self.args.reinforce:
                 valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
-                _, pred_trans = valences.max(dim=1)
+                if self.args.reinforce and self.training:
+                    pred_trans = self.get_predictions(valences, sample=True)
+                else:
+                    pred_trans = self.get_predictions(valences)
+
                 if self.training and self.args.teacher:
                     use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
                     if use_teacher and self.args.continuous_stack:
@@ -135,6 +148,7 @@ class SPINN(nn.Module):
                 valences = None
                 temp_trans = transitions_batch[time_stamp].data
 
+
             for b_id in range(batch_size):
                 stack_size, buffer_size = stack_batch[b_id].size(), buffer_batch[b_id].size()
                 # this sentence is done!
@@ -149,11 +163,14 @@ class SPINN(nn.Module):
 
                     # ensures it's a valid act according to state of buffer, batch, and timestamp
                     # safe check actions if not using teacher forcing... or using teacher forcing but in evaluation
-                    if self.args.tracking and (not self.args.teacher or (self.args.teacher and not self.training)):
+                    if (self.args.tracking or self.args.reinforce) and \
+                            (not self.args.teacher or (self.args.teacher and not self.training)):
                         act, act_ignored = self.resolve_action(buffer_batch[b_id],
                             stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
+                        if self.args.reinforce:
+                            self.track.add_ignored(act_ignored)
 
-                if self.args.tracking:
+                if self.args.tracking or self.args.reinforce:
                     # use teacher valences over predicted valences
                     if teacher_valences is not None:
                         reduce_valence, shift_valence = teacher_valences[b_id]
