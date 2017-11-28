@@ -10,6 +10,7 @@ import argparse
 from constants import PAD, SHIFT, REDUCE
 import sys
 from utils import render_args, cudify
+from math import log
 
 def add_num_ops_and_shift_acts(args, sent):
     trans = sent[1] - 2
@@ -54,17 +55,16 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
 
     total_loss = loss(logits, y_val)
 
-    r = -total_loss.data[0]
-    flag = 1
-    for ignored, action in zip(model.spinn.track.ignored, model.spinn.track.actions):
+    r_clip = 1
+    r = max(-total_loss.data[0] - log(0.33), -r_clip)
+    r = min(r, r_clip)
+    df = 0.99
+    for ignored, action in reversed(zip(model.spinn.track.ignored, model.spinn.track.actions)):
         if not ignored:
             action.reinforce(r)
-            if flag == 1:
-                flag = 0.99
+            r *= df
         else:
-            action.reinforce(0)
-        r = r * flag
-
+            action.reinforce(0.0)
 
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
@@ -79,9 +79,6 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
         if param.grad is not None:
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
 
-  #  for param in model.named_parameters():
-  #      if param[1].grad is None:
-  #          print (param[0])
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
     optimizer.step()
@@ -218,6 +215,12 @@ if __name__=='__main__':
 
     if args.debug:
         args.eval_freq = 100
+
+    if args.reinforce:
+        print("For REINFORCE, Track, Continuous, Teacher are False.")
+        args.continuous_stack = False
+        args.teacher = False
+        args.tracking = False
 
     if args.continuous_stack:
         assert args.tracking

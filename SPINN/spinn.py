@@ -107,8 +107,7 @@ class SPINN(nn.Module):
             num_transitions = len(transitions_batch)
 
         lstm_actions, true_actions = [], []
-        if self.args.reinforce:
-            self.track.reset()
+        self.track.reset()
 
         for time_stamp in range(num_transitions):
             ops_left = num_transitions - time_stamp
@@ -148,7 +147,6 @@ class SPINN(nn.Module):
                 valences = None
                 temp_trans = transitions_batch[time_stamp].data
 
-
             for b_id in range(batch_size):
                 stack_size, buffer_size = stack_batch[b_id].size(), buffer_batch[b_id].size()
                 # this sentence is done!
@@ -180,7 +178,6 @@ class SPINN(nn.Module):
                     reduce_valence, shift_valence = None, None
 
                 no_action = True
-
                 # 2 - REDUCE
                 if act == REDUCE or (self.args.continuous_stack and not self.args.teacher and stack_size >= 2):
                     no_action = False

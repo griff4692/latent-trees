@@ -21,6 +21,9 @@ class TrackingLSTM(nn.Module):
     def initialize_states(self, other_sent):
         self.h, self.c = other_sent
 
+    def reset(self):
+        pass
+
     def lstm(self, inputs, predict=True):
         h = self.state_weights(self.h) # batch, 4 * dim
 
@@ -78,4 +81,3 @@ class PolicyNetwork(nn.Module):
 
     def forward(self, input, predict=True):
         return self.network(input)
-
