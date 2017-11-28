@@ -45,27 +45,26 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     sent1, sent2 = add_num_ops_and_shift_acts(args, sent1), \
         add_num_ops_and_shift_acts(args, sent2)
 
-
-
-
     # Reset gradient
     optimizer.zero_grad()
     # Forward
     fx, sent_true, sent_pred = model(sent1, sent2, teacher_prob)
 
-
-
-
     logits = F.log_softmax(fx)
 
     total_loss = loss(logits, y_val)
+
     r = -total_loss.data[0]
+    flag = 1
     for ignored, action in zip(model.spinn.track.ignored, model.spinn.track.actions):
         if not ignored:
             action.reinforce(r)
-            r = 0
+            if flag == 1:
+                flag = 0.99
         else:
             action.reinforce(0)
+        r = r * flag
+
 
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
@@ -80,6 +79,9 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
         if param.grad is not None:
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
 
+  #  for param in model.named_parameters():
+  #      if param[1].grad is None:
+  #          print (param[0])
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
     optimizer.step()

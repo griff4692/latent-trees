@@ -60,7 +60,7 @@ class PolicyNetwork(nn.Module):
 
 
     def network(self, inputs):
-        inputs_transform = self.input_weights(inputs)
+        inputs_transform = self.input_weights(inputs.detach())
         x_plus_h = self.relu(inputs_transform)
 
         prediction = self.softmax(self.prediction(x_plus_h))
