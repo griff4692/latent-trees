@@ -35,6 +35,15 @@ def predict(args, model, sent1, sent2, cuda=False):
         return logits.data.cpu().numpy().argmax(axis=1)
     return logits.data.numpy().argmax(axis=1)
 
+def nll_no_reduce(predictions, target):
+    batch_loss = []
+    predictions = F.log_softmax(predictions)
+    target = target.data
+    for i in range(predictions.size()[0]):
+        target_prob = predictions[i, int(target[i])]
+        batch_loss.append(target_prob)
+    return -torch.cat(batch_loss, dim=0)
+
 def get_l2_loss(model, l2_lambda):
     loss = 0.0
     for w in model.parameters():
@@ -42,35 +51,47 @@ def get_l2_loss(model, l2_lambda):
             loss += l2_lambda * torch.sum(torch.pow(w, 2))
     return loss
 
-def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
-    sent1, sent2 = add_num_ops_and_shift_acts(args, sent1), \
-        add_num_ops_and_shift_acts(args, sent2)
+def train_batch(args, model, loss, optimizer, hyp, prem, targets, step, teacher_prob):
+    hyp, prem = add_num_ops_and_shift_acts(args, hyp), \
+        add_num_ops_and_shift_acts(args, prem)
 
+    max_hyp_ops = hyp[1].size()[1]
+    max_prem_ops = prem[1].size()[1]
     # Reset gradient
     optimizer.zero_grad()
     # Forward
-    fx, sent_true, sent_pred = model(sent1, sent2, teacher_prob)
+    fx, sent_true, sent_pred, hyp_track_state, prem_track_state = model(hyp, prem, teacher_prob)
 
-    logits = F.log_softmax(fx)
+    total_loss = nll_no_reduce(fx, targets)
 
-    total_loss = loss(logits, y_val)
+    # propagate across sentences
+    rewards = (-total_loss.data - log(0.33)).unsqueeze(1)
+    hyp_rewards = rewards.expand(args.batch_size, max_hyp_ops).contiguous()
+    hyp_actions, hyp_ignored_actions = hyp_track_state
+    hyp_actions = torch.cat(hyp_actions, dim=1)
+    for batch_idx, timestep in hyp_ignored_actions:
+        hyp_rewards[batch_idx, timestep] = 0
+    hyp_actions_flat = hyp_actions.view(-1)
+    hyp_rewards_flat = hyp_rewards.view(-1)
+    hyp_actions_flat.reinforce(hyp_rewards_flat)
 
-    r_clip = 1
-    r = max(-total_loss.data[0] - log(0.33), -r_clip)
-    r = min(r, r_clip)
-    df = 0.99
-    for ignored, action in reversed(zip(model.spinn.track.ignored, model.spinn.track.actions)):
-        if not ignored:
-            action.reinforce(r)
-            r *= df
-        else:
-            action.reinforce(0.0)
+    prem_rewards = rewards.expand(args.batch_size, max_prem_ops).contiguous()
+    prem_actions, prem_ignored_actions = prem_track_state
+    prem_actions = torch.cat(prem_actions, dim=1)
+    for batch_idx, timestep in prem_ignored_actions:
+        prem_rewards[batch_idx, timestep] = 0
+    prem_actions_flat = prem_actions.view(-1)
+    prem_rewards_flat = prem_rewards.view(-1)
+    prem_actions_flat.reinforce(prem_rewards_flat)
+
+    full_act_flat = torch.cat([prem_actions_flat, hyp_actions_flat])
+    autograd.backward(full_act_flat, [None for _ in range((max_hyp_ops + max_prem_ops)*batch_size)], retain_graph=True)
+
+    total_loss = total_loss.mean()
+    total_loss += get_l2_loss(model, 1e-5)
 
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
-
-    autograd.backward(model.spinn.track.actions, [None for _ in model.spinn.track.actions], retain_graph=True)
-    total_loss += get_l2_loss(model, 1e-5)
 
     # Backward
     total_loss.backward()

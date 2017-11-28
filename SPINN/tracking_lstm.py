@@ -21,7 +21,7 @@ class TrackingLSTM(nn.Module):
     def initialize_states(self, other_sent):
         self.h, self.c = other_sent
 
-    def reset(self):
+    def reset(self, batch_size):
         pass
 
     def lstm(self, inputs, predict=True):
@@ -69,15 +69,19 @@ class PolicyNetwork(nn.Module):
         prediction = self.softmax(self.prediction(x_plus_h))
         return (prediction, None)
 
-    def reset(self):
+    def reset(self, batch_size):
         self.actions = []
         self.ignored = []
 
-    def add_action(self, action):
-        self.actions.append(action)
+    def state(self):
+        return (self.actions, self.ignored)
 
-    def add_ignored(self, ignored):
-        self.ignored.append(ignored)
+    def add_action(self, a):
+        self.actions.append(a)
+
+    def add_ignored(self, ignored, b_idx, timestep):
+        if ignored:
+            self.ignored.append((b_idx, timestep))
 
     def forward(self, input, predict=True):
         return self.network(input)

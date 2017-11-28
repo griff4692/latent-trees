@@ -46,17 +46,18 @@ class SNLIClassifier(nn.Module):
         hyp_embed = self.embed(hypothesis[0])
         prem_embed = self.embed(premise[0])
 
+        hyp_trans, prem_trans = hypothesis[1], premise[1]
+
         if not self.args.teacher or not self.training:
-            hyp_trans, prem_trans = hypothesis[1], premise[1]
             if self.args.tracking:
                 hyp_trans, prem_trans = None, None
 
-            hyp_encode = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
-            prem_encode = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
+            hyp_encode, _, _, hyp_track_state = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
+            prem_encode, _, _, prem_track_state = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
             sent_true, sent_pred = None, None
         else:
-            hyp_encode, hyp_true, hyp_pred = self.spinn(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
-            prem_encode, prem_true, prem_pred = self.spinn(prem_embed, premise[1], premise[2], teacher_prob)
+            hyp_encode, hyp_true, hyp_pred, hyp_track_state = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
+            prem_encode, prem_true, prem_pred, prem_track_state = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
 
@@ -81,4 +82,4 @@ class SNLIClassifier(nn.Module):
             features = self.dropout(features)
 
         output = self.output(features)
-        return output, sent_true, sent_pred
+        return output, sent_true, sent_pred, hyp_track_state, prem_track_state

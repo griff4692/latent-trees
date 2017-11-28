@@ -107,7 +107,7 @@ class SPINN(nn.Module):
             num_transitions = len(transitions_batch)
 
         lstm_actions, true_actions = [], []
-        self.track.reset()
+        self.track.reset(batch_size)
 
         for time_stamp in range(num_transitions):
             ops_left = num_transitions - time_stamp
@@ -166,7 +166,7 @@ class SPINN(nn.Module):
                         act, act_ignored = self.resolve_action(buffer_batch[b_id],
                             stack_batch[b_id], buffer_size, stack_size, act, time_stamp, my_ops_left)
                         if self.args.reinforce:
-                            self.track.add_ignored(act_ignored)
+                            self.track.add_ignored(act_ignored, b_id, time_stamp)
 
                 if self.args.tracking or self.args.reinforce:
                     # use teacher valences over predicted valences
@@ -230,6 +230,9 @@ class SPINN(nn.Module):
             top_h = stack.peek()[0]
             outputs.append(top_h)
 
-        if len(true_actions) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions))
+        if self.training:
+            if len(true_actions) > 0:
+                true_actions = torch.cat(true_actions)
+                lstm_actions = torch.log(torch.cat(lstm_actions))
+            return torch.cat(outputs), true_actions, lstm_actions, self.track.state()
         return torch.cat(outputs)
