@@ -98,7 +98,6 @@ class SPINN(nn.Module):
             for _ in buffer_batch
         ]
 
-
         if transitions is None:
             num_transitions = (2 * sent_len) - 1
         else:
@@ -235,4 +234,4 @@ class SPINN(nn.Module):
                 true_actions = torch.cat(true_actions)
                 lstm_actions = torch.log(torch.cat(lstm_actions))
             return torch.cat(outputs), true_actions, lstm_actions, self.track.state()
-        return torch.cat(outputs)
+        return torch.cat(outputs), None, None, None

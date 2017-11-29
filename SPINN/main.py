@@ -29,7 +29,7 @@ def predict(args, model, sent1, sent2, cuda=False):
         add_num_ops_and_shift_acts(args, sent2)
 
     model.eval()
-    output, _, _ = model(sent1, sent2, None)
+    output, _, _, _, _ = model(sent1, sent2, None)
     logits = F.log_softmax(output)
     if args.gpu > -1:
         return logits.data.cpu().numpy().argmax(axis=1)
@@ -65,27 +65,25 @@ def train_batch(args, model, loss, optimizer, hyp, prem, targets, step, teacher_
     total_loss = nll_no_reduce(fx, targets)
 
     # propagate across sentences
-    rewards = (-total_loss.data - log(0.33)).unsqueeze(1)
-    hyp_rewards = rewards.expand(args.batch_size, max_hyp_ops).contiguous()
+    rewards = torch.clamp((-total_loss.data - log(0.33)), -args.reward_clip, args.reward_clip).unsqueeze(1)
+    hyp_rewards = rewards.repeat(1, max_hyp_ops)
     hyp_actions, hyp_ignored_actions = hyp_track_state
-    hyp_actions = torch.cat(hyp_actions, dim=1)
-    for batch_idx, timestep in hyp_ignored_actions:
-        hyp_rewards[batch_idx, timestep] = 0
-    hyp_actions_flat = hyp_actions.view(-1)
-    hyp_rewards_flat = hyp_rewards.view(-1)
-    hyp_actions_flat.reinforce(hyp_rewards_flat)
+    for (batch_idx, timestep) in hyp_ignored_actions:
+        hyp_rewards[batch_idx, timestep] = 0.0
+    for (timestep, action_set) in enumerate(hyp_actions):
+        action_set.reinforce(hyp_rewards[:, timestep].unsqueeze(1))
 
-    prem_rewards = rewards.expand(args.batch_size, max_prem_ops).contiguous()
+    prem_rewards = rewards.repeat(1, max_prem_ops)
     prem_actions, prem_ignored_actions = prem_track_state
-    prem_actions = torch.cat(prem_actions, dim=1)
-    for batch_idx, timestep in prem_ignored_actions:
-        prem_rewards[batch_idx, timestep] = 0
-    prem_actions_flat = prem_actions.view(-1)
-    prem_rewards_flat = prem_rewards.view(-1)
-    prem_actions_flat.reinforce(prem_rewards_flat)
+    for (batch_idx, timestep) in prem_ignored_actions:
+            prem_rewards[batch_idx, timestep] = 0.0
+    for (timestep, action_set) in enumerate(prem_actions):
+        action_set.reinforce(prem_rewards[:, timestep].unsqueeze(1))
 
-    full_act_flat = torch.cat([prem_actions_flat, hyp_actions_flat])
-    autograd.backward(full_act_flat, [None for _ in range((max_hyp_ops + max_prem_ops)*batch_size)], retain_graph=True)
+    flat_hyp_actions = torch.cat(hyp_actions, dim=1).view(-1)
+    flat_prem_actions = torch.cat(prem_actions, dim=1).view(-1)
+    full_act_flat = torch.cat([flat_hyp_actions, flat_prem_actions])
+    autograd.backward(full_act_flat, [None for _ in range(full_act_flat.size()[0])], retain_graph=True)
 
     total_loss = total_loss.mean()
     total_loss += get_l2_loss(model, 1e-5)
@@ -210,7 +208,7 @@ def train(args):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='SPINN dependency parse + SNLI Classifier arguments.')
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--embed_dim', type=int, default=300)
     parser.add_argument('--grad_clip', type=int, default=5)
     parser.add_argument('--hidden_size', type=int, default=150)
@@ -218,7 +216,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=True)
+    parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
@@ -231,6 +229,7 @@ if __name__=='__main__':
     parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
     parser.add_argument('--teach_lambda_end', type=float, default=0.5)
     parser.add_argument('--reinforce', type=bool, default=True)
+    parser.add_argument('--reward_clip', type=float, default=2.5)
 
     args = parser.parse_args()
 

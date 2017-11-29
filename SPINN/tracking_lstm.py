@@ -61,7 +61,6 @@ class PolicyNetwork(nn.Module):
         self.actions = []
         self.ignored = []
 
-
     def network(self, inputs):
         inputs_transform = self.input_weights(inputs.detach())
         x_plus_h = self.relu(inputs_transform)
