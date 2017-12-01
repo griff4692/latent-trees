@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import import_spinn
 from spinn import SPINN
 from torch.autograd import Variable
 from actions import HeKaimingInitializer, LayerNormalization

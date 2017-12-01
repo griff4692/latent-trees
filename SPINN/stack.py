@@ -44,7 +44,11 @@ class DefaultStack(BaseStack):
         self.states.append(state)
 
     def pop(self, valence):
-        self.states.pop()
+        try:
+            self.states.pop()
+            return True
+        except IndexError:
+            return False
 
     def peek(self):
         if self.size() == 0:
@@ -165,6 +169,7 @@ class ContinuousStack(BaseStack):
             self.valences[idx] = self.valences[idx] - mass_coeff
             mass_remaining -= mass_coeff
             idx -= 1
+        return True
 
     def restore(self, valence):
         self.reduce('restore', valence)

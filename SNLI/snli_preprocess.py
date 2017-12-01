@@ -1,6 +1,7 @@
 import json
 import os
 import argparse
+import import_spinn
 
 MINI_SIZE = 256
 OVERWRITE = True

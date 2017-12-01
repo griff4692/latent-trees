@@ -170,10 +170,14 @@ class SPINN(nn.Module):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(reduce_valence)
+                    if not stack_batch[b_id].pop(reduce_valence):
+                        print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
+                        raise Exception("Tried to pop from an empty list.")
 
                     l = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(reduce_valence)
+                    if not stack_batch[b_id].pop(reduce_valence):
+                        print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
+                        raise Exception("Tried to pop from an empty list.")
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
@@ -218,4 +222,4 @@ class SPINN(nn.Module):
 
         if len(true_actions) > 0 and self.training:
             return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions))
-        return torch.cat(outputs)
+        return torch.cat(outputs), None, None

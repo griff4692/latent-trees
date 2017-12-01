@@ -1,6 +1,7 @@
 from torchtext import datasets
 from torchtext import data
 import torchtext.vocab as vocab
+import import_spinn
 import os
 import sys
 
