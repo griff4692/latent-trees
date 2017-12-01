@@ -6,10 +6,11 @@ import abc, six
 from abc import ABCMeta
 import math
 from utils import cudify
+import torch.nn.functional as F
 
-def create_stack(args):
+def create_stack(args, max_size):
     if args.continuous_stack:
-        return ContinuousStack(args)
+        return ContinuousStack(args, max_size)
     else:
         return DefaultStack(args)
 
@@ -32,7 +33,6 @@ class BaseStack:
         pass
 
 class DefaultStack(BaseStack):
-    # TODO Figure out Thin Stack.
     def __init__(self, args):
         self.args = args
         self.states = []
@@ -69,111 +69,70 @@ class DefaultStack(BaseStack):
         return len(self.states)
 
 class ContinuousStack(BaseStack):
-    def __init__(self, args):
+    def __init__(self, args, max_size):
         self.args = args
         self.dim = self.args.hidden_size
-        self.valences = None
-        self.hs = None
-        self.cs = None
-        self.num_push = 0
+        self.max_size = max_size
+        self.valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1), requires_grad=False))
+        self.cum_valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1), requires_grad=False))
+        self.states = cudify(self.args, Variable(torch.FloatTensor(max_size, 2, self.dim), requires_grad=False))
+        self.stack_p = 0
         self.num_pop = 0
-
-        self.zero_state = (cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)),
-                cudify(self.args, Variable(torch.zeros(1, self.dim), requires_grad=False)))
-
 
     def one_valence(self):
         return cudify(self.args, Variable(torch.FloatTensor([1]), requires_grad=False))
 
     def add(self, state, valence, id=0):
-        assert len(state) == 2
-
-        self.num_push += 1
-
         hs, cs = state
-
-        # TODO this is defensive programming but may not be necessary
         valence = valence.clone()
+        self.valences[self.stack_p] = valence
+        if self.stack_p > 0:
+            valence_broad = valence.repeat(self.stack_p).unsqueeze(1)
+            self.cum_valences[0:self.stack_p] = self.cum_valences[0:self.stack_p] + valence_broad
 
-        if self.valences is None:
-            self.valences = valence
-            self.hs, self.cs = hs, cs
-        else:
-            if not valence.size()[0] == 1:
-                raise Exception("Adding more than one valence at a time.")
-
-            self.valences = torch.cat([self.valences, valence], 0)
-            self.hs = torch.cat([self.hs, hs], 0)
-            self.cs = torch.cat([self.cs, cs], 0)
-
-
-    def reduce(self, mass_remaining):
-        mass_remaining = cudify(self.args, Variable(torch.FloatTensor([mass_remaining])))
-        size = self.size()
-        read_mask = cudify(self.args, Variable(torch.zeros(size, 1), requires_grad=False))
-        idx = size - 1
-        while mass_remaining.data[0] > 0.0 and idx >= 0:
-            mass_remaining_data = mass_remaining.data[0]
-            this_valence = self.valences[idx].data[0]
-            if mass_remaining_data - this_valence >= 1.0:
-                mass_coeff = self.valences[idx]
-            elif mass_remaining_data > 1.0 and mass_remaining_data - this_valence < 1.0:
-                skip_mass = mass_remaining - 1.0
-                mass_coeff = self.valences[idx] - skip_mass
-                read_mask[idx] = mass_coeff
-            else:
-                mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
-                read_mask[idx] = mass_coeff
-
-            mass_remaining -= mass_coeff
-            idx -= 1
-
-        reduced_hs = torch.mul(read_mask, self.hs).sum(0, keepdim=True)
-        reduced_cs = torch.mul(read_mask, self.cs).sum(0, keepdim=True)
-        return reduced_hs, reduced_cs
+        self.states[self.stack_p, 0, :] = hs.clone()
+        self.states[self.stack_p, 1, :] = cs.clone()
+        self.stack_p += 1
 
     def peek(self):
-        if self.size() == 0:
-            return self.zero_state
-        return self.reduce(1.0)
+        cum_mask = F.relu(1.0 - self.cum_valences) # ReLU
+        x = torch.cat([self.valences, cum_mask], dim=1)
+        x_min, _ = torch.min(x, dim=1)
+        read_mask = x_min.unsqueeze(1).repeat(1, 2).unsqueeze(2) # max_size, 2, 1
+        # max_size, 2, dim
+        h, c = (read_mask * self.states).sum(dim=0).split(1, 0)
+        return h, c
+
+    def print_stack_state(self):
+        print("Pushes=%d.  Pops=%d" % (self.stack_p, self.num_pop))
+        print("Stack pointer is at index %d" % self.stack_p)
+        print(self.states.sum(dim=1).sum(dim=1).data)
+        print(self.valences.data)
+        print(self.cum_valences.data)
+        print("\n\n")
 
     def peek_two(self):
-        if self.size() == 0:
-            peek1 = self.zero_state
-            peek2 = self.zero_state
-        else:
-            peek1 = self.reduce(1.0)
-            peek2 = self.reduce(2.0)
+        h1, c1 = self.peek()
 
-        return peek1, peek2
+        valence = self.one_valence()
+        temp_valences = F.relu(self.valences - F.relu(valence - self.cum_valences))
+        temp_cum_valences = F.relu(self.cum_valences - valence)
+
+        temp_cum_mask = F.relu(1.0 - temp_cum_valences)
+        min_val, _ = torch.min(torch.cat([temp_valences, temp_cum_mask], dim=1), dim=1)
+        temp_read_mask = min_val.unsqueeze(1).repeat(1, 2).unsqueeze(2) # max_size, 2, 1
+        # max_size, 2, dim
+        h2, c2 = (temp_read_mask * self.states).sum(dim=0).split(1, 0)
+        return (h1, c1), (h2, c2)
 
     def size(self):
-        if self.valences is None:
-            return 0
-
-        val_sum = self.valences.sum().data
-        if self.args.gpu > -1:
-            val_sum = val_sum.cpu()
-        if val_sum.numpy()[0] == 0.0:
-            return 0
-
-        return self.valences.size()[0]
+        return self.max_size
 
     def pop(self, valence):
         self.num_pop += 1
-        size = self.size()
-        idx = size - 1
-        mass_remaining = valence.clone()
-        while mass_remaining.data[0] > 0.0 and idx >= 0:
-            mass_coeff = torch.min(torch.cat([self.valences[idx], mass_remaining]))
-            self.valences[idx] = self.valences[idx] - mass_coeff
-            mass_remaining -= mass_coeff
-            idx -= 1
+        self.valences = F.relu(self.valences - F.relu(valence - self.cum_valences))
+        self.cum_valences = F.relu(self.cum_valences - valence)
         return True
-
-    def restore(self, valence):
-        self.reduce('restore', valence)
-
 
 # register all subclasses to base class
 BaseStack.register(DefaultStack)

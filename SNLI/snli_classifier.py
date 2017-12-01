@@ -95,8 +95,8 @@ class SNLIClassifier(nn.Module):
             if self.args.tracking:
                 hyp_trans, prem_trans = None, None
 
-            hyp_encode = self.spinn(hyp_embed, hyp_trans, hypothesis[2], prem_summary, teacher_prob)
-            prem_encode = self.spinn(prem_embed, prem_trans, premise[2], hyp_summary, teacher_prob)
+            hyp_encode, _, _ = self.spinn(hyp_embed, hyp_trans, hypothesis[2], prem_summary, teacher_prob)
+            prem_encode, _, _ = self.spinn(prem_embed, prem_trans, premise[2], hyp_summary, teacher_prob)
             sent_true, sent_pred = None, None
         else:
             hyp_encode, hyp_true, hyp_pred = self.spinn(hyp_embed, hypothesis[1], hypothesis[2], prem_summary, teacher_prob)

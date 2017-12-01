@@ -63,7 +63,6 @@ class SPINN(nn.Module):
     def forward(self, sentence, transitions, num_ops, other_sent, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2s
-
         # batch normalization and dropout
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2).contiguous()
@@ -82,11 +81,6 @@ class SPINN(nn.Module):
             )
         ]
 
-        stack_batch = [
-            create_stack(self.args)
-            for _ in buffer_batch
-        ]
-
         if self.args.tracking:
             self.track.initialize_states(other_sent)
         else:
@@ -98,6 +92,11 @@ class SPINN(nn.Module):
             transitions_batch = [trans.squeeze(1) for trans
                 in list(torch.split(transitions, 1, 1))]
             num_transitions = len(transitions_batch)
+
+        stack_batch = [
+            create_stack(self.args, 2 * num_transitions)
+            for _ in buffer_batch
+        ]
 
         lstm_actions, true_actions = [], []
 
