@@ -168,7 +168,7 @@ def train(args):
 
         teacher_prob *= args.force_decay
         print("Cost for Epoch #%d --> %.2f\n" % (epoch, cost))
-        torch.save(model, '../weights/model_%d.pth' % epoch)
+        torch.save(model, '../weights/%s_model_%d.pth' % (args.experiment, epoch))
 
 
 if __name__=='__main__':
@@ -193,6 +193,7 @@ if __name__=='__main__':
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
     parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
     parser.add_argument('--teach_lambda_end', type=float, default=0.5)
+    parser.add_argument('--experiment', default='default')
 
     args = parser.parse_args()
 
@@ -201,6 +202,9 @@ if __name__=='__main__':
 
     if args.continuous_stack:
         assert args.tracking
+
+    if not args.debug and args.experiment == 'default':
+        raise Exception("Must provide a real experiment name!")
 
     render_args(args)
     sys.stdout.flush()
