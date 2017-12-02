@@ -63,7 +63,6 @@ class SPINN(nn.Module):
     def forward(self, sentence, transitions, num_ops, other_sent, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
         out = self.word(sentence) # batch, |sent|, h * 2s
-
         # batch normalization and dropout
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2).contiguous()
@@ -82,11 +81,6 @@ class SPINN(nn.Module):
             )
         ]
 
-        stack_batch = [
-            create_stack(self.args)
-            for _ in buffer_batch
-        ]
-
         if self.args.tracking:
             self.track.initialize_states(other_sent)
         else:
@@ -98,6 +92,11 @@ class SPINN(nn.Module):
             transitions_batch = [trans.squeeze(1) for trans
                 in list(torch.split(transitions, 1, 1))]
             num_transitions = len(transitions_batch)
+
+        stack_batch = [
+            create_stack(self.args, 2 * num_transitions)
+            for _ in buffer_batch
+        ]
 
         lstm_actions, true_actions = [], []
 
@@ -170,10 +169,14 @@ class SPINN(nn.Module):
                     reduce_ids.append(b_id)
 
                     r = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(reduce_valence)
+                    if not stack_batch[b_id].pop(reduce_valence):
+                        print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
+                        raise Exception("Tried to pop from an empty list.")
 
                     l = stack_batch[b_id].peek()
-                    stack_batch[b_id].pop(reduce_valence)
+                    if not stack_batch[b_id].pop(reduce_valence):
+                        print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
+                        raise Exception("Tried to pop from an empty list.")
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
@@ -218,4 +221,4 @@ class SPINN(nn.Module):
 
         if len(true_actions) > 0 and self.training:
             return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions))
-        return torch.cat(outputs)
+        return torch.cat(outputs), None, None
