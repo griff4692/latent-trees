@@ -101,8 +101,8 @@ class ContinuousStack(BaseStack):
         x = torch.cat([self.valences, cum_mask], dim=1)
         x_min, _ = torch.min(x, dim=1)
         read_mask = x_min.unsqueeze(1)
-        h = (read_mask * self.h).sum(dim=0, keepdim=True)
-        c = (read_mask * self.c).sum(dim=0, keepdim=True)
+        h = (read_mask * self.h.clone()).sum(dim=0, keepdim=True)
+        c = (read_mask * self.c.clone()).sum(dim=0, keepdim=True)
 
         return h, c
 
@@ -125,8 +125,8 @@ class ContinuousStack(BaseStack):
         min_val, _ = torch.min(torch.cat([temp_valences, temp_cum_mask], dim=1), dim=1)
         temp_read_mask = min_val.unsqueeze(1)
 
-        h2 = (temp_read_mask * self.h).sum(dim=0, keepdim=True)
-        c2 = (temp_read_mask * self.c).sum(dim=0, keepdim=True)
+        h2 = (temp_read_mask * self.h.clone()).sum(dim=0, keepdim=True)
+        c2 = (temp_read_mask * self.c.clone()).sum(dim=0, keepdim=True)
         return (h1, c1), (h2, c2)
 
     def size(self):
