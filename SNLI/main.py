@@ -65,6 +65,12 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     total_loss.backward()
     for param in model.parameters():
         if param.grad is not None:
+            isnan = np.any(np.isnan(param.grad.data.numpy()))
+            isinf = np.any(np.isinf(param.grad.data.numpy()))
+            if isnan or isinf:
+                print(param.grad.data.numpy())
+                print(isnan, isinf)
+                raise Exception("Param has explosive gradient!")
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))

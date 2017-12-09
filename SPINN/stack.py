@@ -73,10 +73,10 @@ class ContinuousStack(BaseStack):
         self.args = args
         self.dim = self.args.hidden_size
         self.max_size = max_size
-        self.valences = cudify(self.args, Variable(torch.zeros(max_size, 1), requires_grad=False))
-        self.cum_valences = cudify(self.args, Variable(torch.zeros(max_size, 1), requires_grad=False))
-        self.h = cudify(self.args, Variable(torch.zeros(max_size, self.dim), requires_grad=False))
-        self.c = cudify(self.args, Variable(torch.zeros(max_size, self.dim), requires_grad=False))
+        self.valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1).zero_(), requires_grad=False))
+        self.cum_valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1).zero_(), requires_grad=False))
+        self.h = cudify(self.args, Variable(torch.FloatTensor(max_size, self.dim).zero_(), requires_grad=False))
+        self.c = cudify(self.args, Variable(torch.FloatTensor(max_size, self.dim).zero_(), requires_grad=False))
         self.stack_p = 0
         self.num_pop = 0
         self.zero_state = Variable(torch.zeros(1, self.dim), requires_grad=False)
@@ -102,10 +102,10 @@ class ContinuousStack(BaseStack):
         cum_mask = F.relu(1.0 - self.cum_valences) # ReLU
         x = torch.cat([self.valences, cum_mask], dim=1)
         x_min, _ = torch.min(x, dim=1)
-        read_mask = x_min.unsqueeze(1)
+        read_mask = x_min.unsqueeze(1).expand(self.max_size, self.dim)
 
-        h = (read_mask * self.h.clone()).sum(dim=0, keepdim=True)
-        c = (read_mask * self.c.clone()).sum(dim=0, keepdim=True)
+        h = torch.mul(read_mask, self.h.clone()).sum(dim=0, keepdim=True)
+        c = torch.mul(read_mask, self.c.clone()).sum(dim=0, keepdim=True)
         return h, c
 
     def print_stack_state(self):
@@ -126,10 +126,10 @@ class ContinuousStack(BaseStack):
 
         temp_cum_mask = F.relu(1.0 - temp_cum_valences)
         min_val, _ = torch.min(torch.cat([temp_valences, temp_cum_mask], dim=1), dim=1)
-        temp_read_mask = min_val.unsqueeze(1)
+        temp_read_mask = min_val.unsqueeze(1).expand(self.max_size, self.dim)
 
-        h2 = (temp_read_mask * self.h.clone()).sum(dim=0, keepdim=True)
-        c2 = (temp_read_mask * self.c.clone()).sum(dim=0, keepdim=True)
+        h2 = torch.mul(temp_read_mask, self.h.clone()).sum(dim=0, keepdim=True)
+        c2 = torch.mul(temp_read_mask, self.c.clone()).sum(dim=0, keepdim=True)
         return (h1, c1), (h2, c2)
 
     def size(self):
