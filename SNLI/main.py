@@ -28,7 +28,7 @@ def predict(args, model, sent1, sent2, cuda=False):
         add_num_ops_and_shift_acts(args, sent2)
 
     model.eval()
-    output, _, _ = model(sent1, sent2, None)
+    output, _, _, _ = model(sent1, sent2, None)
     logits = F.log_softmax(output)
     if args.gpu > -1:
         return logits.data.cpu().numpy().argmax(axis=1)
@@ -48,13 +48,16 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     # Reset gradient
     optimizer.zero_grad()
     # Forward
-    fx, sent_true, sent_pred = model(sent1, sent2, teacher_prob)
+    fx, sent_true, sent_pred, valences = model(sent1, sent2, teacher_prob)
     logits = F.log_softmax(fx)
-
-    total_loss = loss(logits, y_val)
+    total_loss = loss.forward(logits, y_val)
 
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
+
+    if args.continuous_stack:
+        v1, v2 = valences.split(1, 1)
+        total_loss += torch.pow(v1 - v2, 2).mean()
 
     total_loss += get_l2_loss(model, 1e-5)
 
@@ -116,9 +119,8 @@ def train(args):
                 count_iter = 0
                 confusion_matrix = np.zeros([num_labels, num_labels])
                 dev_iter.init_epoch()
-
+                model.eval()
                 for dev_batch_idx, dev_batch in enumerate(dev_iter):
-                    model.eval()
                     pred = predict(
                         args,
                         model,

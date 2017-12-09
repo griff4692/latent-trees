@@ -9,6 +9,7 @@ from tracking_lstm import TrackingLSTM
 from random import random
 from utils import cudify
 import math
+import numpy as np
 
 class SPINN(nn.Module):
     def __init__(self, args):
@@ -25,11 +26,24 @@ class SPINN(nn.Module):
         if self.args.tracking:
             self.track = TrackingLSTM(self.args)
 
-    def update_tracker(self, buffer, stack, batch_size):
+    def update_tracker(self, buffer, stack, batch_size, time_stamp):
         b_s, s1_s, s2_s = [], [], []
         for b_id in range(batch_size):
             b = buffer[b_id].peek()[0]
             s1, s2 = stack[b_id].peek_two()
+
+            isnan = np.any(np.isnan(s1[0].data.numpy()))
+            if isnan:
+                raise Exception("S1 is nan")
+
+            isnan = np.any(np.isnan(s1[0].data.numpy()))
+            if isnan:
+                raise Exception("S1 is nan")
+
+            isnan = np.any(np.isnan(b.data.numpy()))
+            if isnan:
+                raise Exception("Top of buffer is nan")
+
             b_s.append(b); s1_s.append(s1[0]); s2_s.append(s2[0])
 
         bs_cat = torch.cat(b_s)
@@ -62,7 +76,21 @@ class SPINN(nn.Module):
 
     def forward(self, sentence, transitions, num_ops, other_sent, teacher_prob):
         batch_size, sent_len, _  = sentence.size()
+
+        isnan = np.any(np.isnan(sentence.data.numpy()))
+        if isnan:
+            raise Exception("Sentence is nan")
+
         out = self.word(sentence) # batch, |sent|, h * 2s
+
+        isnan = np.any(np.isnan(out.data.numpy()))
+        if isnan:
+            if self.training:
+                print("Is training\n")
+            else:
+                print("Is testing\n")
+            raise Exception("Output is nan")
+
         # batch normalization and dropout
         if not self.args.no_batch_norm:
             out = out.transpose(1, 2).contiguous()
@@ -100,6 +128,8 @@ class SPINN(nn.Module):
 
         lstm_actions, true_actions = [], []
 
+        all_valences = []
+
         for time_stamp in range(num_transitions):
             ops_left = num_transitions - time_stamp
 
@@ -110,7 +140,8 @@ class SPINN(nn.Module):
             reduce_tracking_states = []
             teacher_valences = None
             if self.args.tracking:
-                valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
+                valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size, time_stamp)
+                all_valences.append(valences.unsqueeze(1))
                 _, pred_trans = valences.max(dim=1)
                 if self.training and self.args.teacher:
                     use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
@@ -219,6 +250,7 @@ class SPINN(nn.Module):
             top_h = stack.peek()[0]
             outputs.append(top_h)
 
+        sum_valences = torch.cat(all_valences, dim=1).sum(1)
         if len(true_actions) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions))
-        return torch.cat(outputs), None, None
+            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions)), None
+        return torch.cat(outputs), None, None, sum_valences

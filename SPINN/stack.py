@@ -73,45 +73,48 @@ class ContinuousStack(BaseStack):
         self.args = args
         self.dim = self.args.hidden_size
         self.max_size = max_size
-        self.valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1), requires_grad=False))
-        self.cum_valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1), requires_grad=False))
-        self.h = cudify(self.args, Variable(torch.FloatTensor(max_size, self.dim), requires_grad=False))
-        self.c = cudify(self.args, Variable(torch.FloatTensor(max_size, self.dim), requires_grad=False))
+        self.valences = cudify(self.args, Variable(torch.zeros(max_size, 1), requires_grad=False))
+        self.cum_valences = cudify(self.args, Variable(torch.zeros(max_size, 1), requires_grad=False))
+        self.h = cudify(self.args, Variable(torch.zeros(max_size, self.dim), requires_grad=False))
+        self.c = cudify(self.args, Variable(torch.zeros(max_size, self.dim), requires_grad=False))
         self.stack_p = 0
         self.num_pop = 0
+        self.zero_state = Variable(torch.zeros(1, self.dim), requires_grad=False)
 
     def one_valence(self):
         return cudify(self.args, Variable(torch.FloatTensor([1]), requires_grad=False))
 
     def add(self, state, valence, id=0):
         hs, cs = state
-        valence_c1 = valence.clone()
-        valence_c2 = valence.clone()
-        self.valences[self.stack_p] = valence_c1
+        self.valences[self.stack_p] = valence.clone()
         if self.stack_p > 0:
-            valence_broad = valence_c2.repeat(self.stack_p).unsqueeze(1)
+            valence_broad = valence.clone().repeat(self.stack_p).unsqueeze(1)
             self.cum_valences[0:self.stack_p] = self.cum_valences[0:self.stack_p] + valence_broad
 
-        self.h[self.stack_p, :] = hs.clone()
-        self.c[self.stack_p, :] = cs.clone()
+        self.h[self.stack_p, :] = hs
+        self.c[self.stack_p, :] = cs
         self.stack_p += 1
 
     def peek(self):
+        if self.size() == 0:
+            return self.zero_state, self.zero_state
+
         cum_mask = F.relu(1.0 - self.cum_valences) # ReLU
         x = torch.cat([self.valences, cum_mask], dim=1)
         x_min, _ = torch.min(x, dim=1)
         read_mask = x_min.unsqueeze(1)
+
         h = (read_mask * self.h.clone()).sum(dim=0, keepdim=True)
         c = (read_mask * self.c.clone()).sum(dim=0, keepdim=True)
-
         return h, c
 
     def print_stack_state(self):
         print("Pushes=%d.  Pops=%d" % (self.stack_p, self.num_pop))
         print("Stack pointer is at index %d" % self.stack_p)
-        print(self.states.sum(dim=1).sum(dim=1).data)
-        print(self.valences.data)
-        print(self.cum_valences.data)
+        print("\nValences\n")
+        print(self.valences[:self.stack_p + 1].data.numpy())
+        print("\nCumValences\n")
+        print(self.cum_valences[:self.stack_p + 1].data.numpy())
         print("\n\n")
 
     def peek_two(self):
@@ -130,9 +133,11 @@ class ContinuousStack(BaseStack):
         return (h1, c1), (h2, c2)
 
     def size(self):
-        return self.max_size
+        return self.stack_p
 
     def pop(self, valence):
+        if self.size() == 0:
+            return True
         self.num_pop += 1
         self.valences = F.relu(self.valences - F.relu(valence - self.cum_valences))
         self.cum_valences = F.relu(self.cum_valences - valence)

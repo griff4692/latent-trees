@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from utils import cudify
+import numpy as np
 
 class TrackingLSTM(nn.Module):
     def __init__(self, args):
@@ -37,7 +38,11 @@ class TrackingLSTM(nn.Module):
         if predict:
             nonlinear = self.sigmoid if self.args.continuous_stack else self.softmax
             prediction = nonlinear(self.prediction(self.h))
-        return (prediction, self.h)
+
+            isnan = np.any(np.isnan(prediction.data.numpy()))
+            if isnan:
+                raise Exception("Tracking LSTM got faulty outputs")
+        return prediction, self.h
 
 
     def forward(self, input, predict=True):
