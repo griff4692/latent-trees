@@ -27,18 +27,60 @@ class LayerNormalization(nn.Module):
         ln_out = ln_out * self.a2 + self.b2
         return ln_out
 
-class Reduce(nn.Module):
+class ReduceHyp(nn.Module):
     def __init__(self, dim_size):
-        super(Reduce, self).__init__()
+        super(ReduceHyp, self).__init__()
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
         self.compose_left = nn.Linear(dim_size, 5 * dim_size)
         HeKaimingInitializer(self.compose_left.weight)
         self.compose_right = nn.Linear(dim_size, 5 * dim_size, bias=False)
         HeKaimingInitializer(self.compose_right.weight)
-
+        self.compose_premise = nn.Linear(dim_size, dim_size)
+        HeKaimingInitializer(self.compose_premise.weight)
+        self.compose_attn = nn.Linear(dim_size, dim_size)
+        HeKaimingInitializer(self.compose_attn.weight)
+        self.compose_state = nn.Linear(dim_size, dim_size)
+        HeKaimingInitializer(self.compose_state.weight)
         self.left_ln = LayerNormalization(dim_size)
         self.right_ln = LayerNormalization(dim_size)
+
+
+    def lstm(self, input, cl, cr, attend):
+        (i, fl, fr, o, g) = torch.chunk(input, 5, 1)
+        c = torch.mul(cl, self.sigmoid(fl)) + torch.mul(cr, self.sigmoid(fr)) + \
+            torch.mul(self.sigmoid(i), self.tanh(g))
+        h = torch.mul(self.sigmoid(o), self.tanh(c))
+        h = h + torch.mul(self.sigmoid(o), self.tanh(attend))
+        a = self.attend_premise + self.compose_attn(attend) + self.compose_state(c)
+        return (h, c, a)
+
+    def forward(self, sl, sr, trans1):
+        (hl, cl, al) = sl
+        (hr, cr, ar) = sr
+        input_lstm_left = self.compose_left(self.left_ln(hl))
+        input_lstm_right = self.compose_right(self.right_ln(hr))
+
+        self.attend_premise = self.compose_premise(trans1)
+        attend = (al + ar) * self.attend_premise
+
+        input_lstm = input_lstm_right + input_lstm_left
+
+        output = self.lstm(input_lstm, cl, cr, attend)
+        return (torch.split(output[0], 1), torch.split(output[1], 1), torch.split(output[2], 1))
+
+class ReducePrem(nn.Module):
+    def __init__(self, dim_size):
+        super(ReducePrem, self).__init__()
+        self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
+        self.compose_left = nn.Linear(dim_size, 5 * dim_size)
+        HeKaimingInitializer(self.compose_left.weight)
+        self.compose_right = nn.Linear(dim_size, 5 * dim_size, bias=False)
+        HeKaimingInitializer(self.compose_right.weight)
+        self.left_ln = LayerNormalization(dim_size)
+        self.right_ln = LayerNormalization(dim_size)
+
 
     def lstm(self, input, cl, cr):
         (i, fl, fr, o, g) = torch.chunk(input, 5, 1)
@@ -52,8 +94,8 @@ class Reduce(nn.Module):
         (hr, cr) = sr
         input_lstm_left = self.compose_left(self.left_ln(hl))
         input_lstm_right = self.compose_right(self.right_ln(hr))
+
         input_lstm = input_lstm_right + input_lstm_left
 
         output = self.lstm(input_lstm, cl, cr)
-
         return (torch.split(output[0], 1), torch.split(output[1], 1))

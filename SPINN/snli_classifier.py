@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from spinn import SPINN
+from spinn import SPINNPrem, SPINNHyp
 from actions import HeKaimingInitializer, LayerNormalization
 
 class SNLIClassifier(nn.Module):
@@ -24,7 +24,8 @@ class SNLIClassifier(nn.Module):
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
         HeKaimingInitializer(self.output.weight)
-        self.spinn = SPINN(self.args)
+        self.premise = SPINNPrem(self.args)
+        self.hypothesis = SPINNHyp(self.args)
 
     def set_weight(self, weight):
         self.embed.weight.data.copy_(torch.from_numpy(weight))
@@ -41,8 +42,10 @@ class SNLIClassifier(nn.Module):
         hyp_embed = self.embed(hypothesis[0])
         prem_embed = self.embed(premise[0])
 
-        hyp_encode = self.spinn(hyp_embed, hypothesis[1])
-        prem_encode = self.spinn(prem_embed, premise[1])
+        prem_encode = self.premise(prem_embed, premise[1])
+
+        hyp_encode = self.hypothesis(hyp_embed, hypothesis[1], prem_encode)
+
 
         features = self.prepare_features(hyp_encode, prem_encode)
 
