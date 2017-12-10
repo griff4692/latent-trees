@@ -19,6 +19,7 @@ def prepare_snli_batches(args):
     data_dir = '.data/snli/snli_1.0/'
 
     pre = resolve_data_bug(data_dir)
+    pre = ""
     train_path = pre + 'clean_train.jsonl'
     validation_path = pre + 'clean_dev.jsonl'
     test_path = pre + 'clean_test.jsonl'
@@ -26,18 +27,18 @@ def prepare_snli_batches(args):
     debug_train = pre + 'mini_clean_train.jsonl'
     debug_validation = pre + 'mini_clean_dev.jsonl'
     debug_test = pre + 'mini_clean_test.jsonl'
-
-    if not os.path.exists(os.path.join(data_dir, train_path)):
+    post= "snli_1.0_"
+    if not os.path.exists(os.path.join(data_dir, post+train_path)):
         remove_unk('train')
 
-    if not os.path.exists(os.path.join(data_dir, test_path)):
+    if not os.path.exists(os.path.join(data_dir, post+test_path)):
         remove_unk('test')
 
-    if not os.path.exists(os.path.join(data_dir, validation_path)):
+    if not os.path.exists(os.path.join(data_dir, post+validation_path)):
         remove_unk('dev')
 
     if args.debug:
-        if not os.path.exists(os.path.join(data_dir, debug_train)) or not os.path.exists(os.path.join(data_dir, debug_validation)):
+        if not os.path.exists(os.path.join(data_dir, post+debug_train)) or not os.path.exists(os.path.join(data_dir, post+debug_validation)):
             gen_mini()
 
         print ("Using first %d examples for development purposes..." % MINI_SIZE)
@@ -49,7 +50,7 @@ def prepare_snli_batches(args):
 
     inputs.build_vocab(train, dev, test)
     answers.build_vocab(train)
-    glove = vocab.GloVe(name='840B', dim=args.embed_dim)
+    glove = vocab.GloVe(name='6B', dim=args.embed_dim)
     inputs.vocab.set_vectors(stoi=glove.stoi, vectors=glove.vectors,dim=args.embed_dim)
 
     train_iter, dev_iter, test_iter = data.BucketIterator.splits(
