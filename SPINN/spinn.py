@@ -35,18 +35,6 @@ class SPINN(nn.Module):
             b = buffer[b_id].peek()[0]
             s1, s2 = stack[b_id].peek_two()
 
-            isnan = np.any(np.isnan(s1[0].data.numpy()))
-        #    if isnan:
-        #        print("S1 is nan")
-
-            isnan = np.any(np.isnan(s1[0].data.numpy()))
-        #    if isnan:
-        #        print("S1 is nan")
-
-            isnan = np.any(np.isnan(b.data.numpy()))
-        #    if isnan:
-        #        print("Top of buffer is nan")
-
             b_s.append(b); s1_s.append(s1[0]); s2_s.append(s2[0])
 
         bs_cat = torch.cat(b_s)
