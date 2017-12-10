@@ -191,7 +191,7 @@ class SPINN(nn.Module):
                     reduce_ids.append(b_id)
 
                     r, l = stack_batch[b_id].peek_two()
-                    if not stack_batch[b_id].pop(reduce_valence):
+                    if not stack_batch[b_id].pop(2.0 * reduce_valence):
                         print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
                         raise Exception("Tried to pop from an empty list.")
 

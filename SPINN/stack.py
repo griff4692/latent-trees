@@ -155,6 +155,9 @@ class ContinuousStack(BaseStack):
             return True
         self.num_pop += 1
 
+        plus = torch.cat([valence, F.relu(self.valences.sum() - 1.0)], dim=0)
+        valence, _ = torch.min(plus, dim=0)
+
         thresh = F.relu(valence - self.cum_valences.clone())
         self.valences = F.relu(self.valences.clone() - thresh)
         self.cum_valences = F.relu(self.cum_valences - valence)
