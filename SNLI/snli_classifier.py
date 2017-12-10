@@ -107,7 +107,10 @@ class SNLIClassifier(nn.Module):
             prem_encode, prem_true, prem_pred, prem_valences = self.spinn(prem_embed, premise[1], premise[2], hyp_summary, teacher_prob)
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
-            valences = None
+            if hyp_valences is not None:
+                valences = torch.cat([hyp_valences, prem_valences])
+            else:
+                valences = None
 
         features = self.prepare_features(hyp_encode, prem_encode)
         features = self.layer_norm_mlp_input(features)

@@ -10,6 +10,7 @@ import argparse
 from constants import PAD, SHIFT, REDUCE
 import sys
 from utils import render_args, cudify
+from math import isnan as mathcheck
 
 def add_num_ops_and_shift_acts(args, sent):
     trans = sent[1] - 2
@@ -36,7 +37,7 @@ def predict(args, model, sent1, sent2, cuda=False):
 
 def get_l2_loss(model, l2_lambda):
     loss = 0.0
-    for w in model.parameters():
+    for name, w in model.named_parameters():
         if w.grad is not None:
             loss += l2_lambda * torch.sum(torch.pow(w, 2))
     return loss
@@ -51,28 +52,23 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     fx, sent_true, sent_pred, valences = model(sent1, sent2, teacher_prob)
     logits = F.log_softmax(fx)
     total_loss = loss.forward(logits, y_val)
-
-    print("Logits loss...\n")
-    print(total_loss.data.numpy())
+    print("Logits loss...%.2f" % total_loss.data.numpy()[0])
 
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
 
-    # if args.continuous_stack:
-    #     v1, v2 = valences.split(1, 1)
-    #     total_loss += torch.pow(v1 - v2, 2).mean()
+    if args.continuous_stack:
+        v1, v2 = valences.split(1, 1)
+        total_loss += torch.pow(v1 - v2, 2).mean()
     total_loss += get_l2_loss(model, 1e-5)
-
-    print("Logits with L2...\n")
-    print(total_loss.data.numpy())
 
     # Backward
     total_loss.backward()
     for param in model.parameters():
         if param.grad is not None:
-            isnan = np.any(np.isnan(param.grad.data.numpy()))
-            if isnan:
-                print("Param has explosive gradient!")
+            # isnan = np.any(np.isnan(param.grad.data.numpy()))
+        #    if isnan:
+        #        print("Param has explosive gradient!")
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
@@ -109,6 +105,10 @@ def train(args):
         args.teach_lambda = (epoch_interp * args.teach_lambda_init) + ((1.0 - epoch_interp) * args.teach_lambda_end)
         train_iter.init_epoch()
         cost = 0
+
+        if args.teacher and args.continuous_stack and epoch == 10:
+            args.teacher = False
+
         for batch_idx, batch in enumerate(train_iter):
             model.train()
             step += 1

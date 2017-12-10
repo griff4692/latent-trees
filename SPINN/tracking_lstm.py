@@ -39,10 +39,6 @@ class TrackingLSTM(nn.Module):
         if predict:
             nonlinear = self.sigmoid if self.args.continuous_stack else self.softmax
             prediction = nonlinear(self.prediction(self.h))
-
-            isnan = np.any(np.isnan(prediction.data.numpy()))
-            if isnan:
-                print("Tracking LSTM got faulty outputs")
         return prediction, self.h
 
 

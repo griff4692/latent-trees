@@ -36,16 +36,16 @@ class SPINN(nn.Module):
             s1, s2 = stack[b_id].peek_two()
 
             isnan = np.any(np.isnan(s1[0].data.numpy()))
-            if isnan:
-                print("S1 is nan")
+        #    if isnan:
+        #        print("S1 is nan")
 
             isnan = np.any(np.isnan(s1[0].data.numpy()))
-            if isnan:
-                print("S1 is nan")
+        #    if isnan:
+        #        print("S1 is nan")
 
             isnan = np.any(np.isnan(b.data.numpy()))
-            if isnan:
-                print("Top of buffer is nan")
+        #    if isnan:
+        #        print("Top of buffer is nan")
 
             b_s.append(b); s1_s.append(s1[0]); s2_s.append(s2[0])
 
@@ -87,12 +87,12 @@ class SPINN(nn.Module):
         out = self.word(sentence) # batch, |sent|, h * 2s
 
         isnan = np.any(np.isnan(out.data.numpy()))
-        if isnan:
-            if self.training:
-                print("Is training\n")
-            else:
-                print("Is testing\n")
-            print("Output is nan")
+    #    if isnan:
+    #        if self.training:
+    #            print("Is training\n")
+    #        else:
+    #            print("Is testing\n")
+    #        print("Output is nan")
 
         # batch normalization and dropout
         if not self.args.no_batch_norm:
@@ -202,15 +202,15 @@ class SPINN(nn.Module):
                     no_action = False
                     reduce_ids.append(b_id)
 
-                    r = stack_batch[b_id].peek()
+                    r, l = stack_batch[b_id].peek_two()
                     if not stack_batch[b_id].pop(reduce_valence):
                         print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
                         raise Exception("Tried to pop from an empty list.")
 
-                    l = stack_batch[b_id].peek()
-                    if not stack_batch[b_id].pop(reduce_valence):
-                        print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
-                        raise Exception("Tried to pop from an empty list.")
+                    # l = stack_batch[b_id].peek()
+                    # if not stack_batch[b_id].pop(reduce_valence):
+                    #     print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
+                    #     raise Exception("Tried to pop from an empty list.")
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])
@@ -255,5 +255,5 @@ class SPINN(nn.Module):
 
         sum_valences = torch.cat(all_valences, dim=1).sum(1)
         if len(true_actions) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions)), None
+            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions)), sum_valences
         return torch.cat(outputs), None, None, sum_valences

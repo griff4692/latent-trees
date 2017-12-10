@@ -110,8 +110,8 @@ class ContinuousStack(BaseStack):
         if self.size() == 0:
             return self.zero_state, self.zero_state
 
-        cum_mask = F.relu(1.0 - self.cum_valences) # ReLU
-        x = torch.cat([self.valences, cum_mask], dim=1)
+        mask = F.relu(1.0 - self.cum_valences) # ReLU
+        x = torch.cat([self.valences, mask], dim=1)
 
         x_min, _ = torch.min(x, dim=1)
         read_mask = x_min.unsqueeze(1)
@@ -139,8 +139,8 @@ class ContinuousStack(BaseStack):
         temp_valences = F.relu(self.valences - F.relu(valence - self.cum_valences))
         temp_cum_valences = F.relu(self.cum_valences - valence)
 
-        temp_cum_mask = F.relu(1.0 - temp_cum_valences)
-        min_val, _ = torch.min(torch.cat([temp_valences, temp_cum_mask], dim=1), dim=1)
+        temp_mask = F.relu(1.0 - temp_cum_valences)
+        min_val, _ = torch.min(torch.cat([temp_valences, temp_mask], dim=1), dim=1)
         temp_read_mask = min_val.unsqueeze(1)
 
         h2 = torch.mul(temp_read_mask, self.h).sum(dim=0, keepdim=True)
@@ -154,7 +154,9 @@ class ContinuousStack(BaseStack):
         if self.size() == 0:
             return True
         self.num_pop += 1
-        self.valences = F.relu(self.valences - F.relu(valence - self.cum_valences))
+
+        thresh = F.relu(valence - self.cum_valences.clone())
+        self.valences = F.relu(self.valences.clone() - thresh)
         self.cum_valences = F.relu(self.cum_valences - valence)
         return True
 
