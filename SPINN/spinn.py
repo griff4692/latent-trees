@@ -10,6 +10,7 @@ from random import random
 from utils import cudify
 import math
 
+
 class SPINN(nn.Module):
     def __init__(self, args):
         super(SPINN, self).__init__()

@@ -3,12 +3,16 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from snli_classifier import SNLIClassifier
+
 from batcher import prepare_snli_batches
 import numpy as np
 import argparse
 from constants import PAD, SHIFT, REDUCE
 import sys
 from utils import render_args, cudify
+
+
+
 
 def add_num_ops_and_shift_acts(args, sent):
     trans = sent[1] - 2
@@ -195,7 +199,7 @@ if __name__=='__main__':
     args = parser.parse_args()
 
     if args.debug:
-        args.eval_freq = 1000
+        args.eval_freq = 10
 
     if args.continuous_stack:
         assert args.tracking
