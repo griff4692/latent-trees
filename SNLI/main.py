@@ -52,15 +52,18 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     logits = F.log_softmax(fx)
     total_loss = loss.forward(logits, y_val)
 
+    print("Logits loss...\n")
+    print(total_loss.data.numpy())
+
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
 
     # if args.continuous_stack:
     #     v1, v2 = valences.split(1, 1)
     #     total_loss += torch.pow(v1 - v2, 2).mean()
-
     total_loss += get_l2_loss(model, 1e-5)
 
+    print("Logits with L2...\n")
     print(total_loss.data.numpy())
 
     # Backward
@@ -69,7 +72,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
         if param.grad is not None:
             isnan = np.any(np.isnan(param.grad.data.numpy()))
             if isnan:
-                raise Exception("Param has explosive gradient!")
+                print("Param has explosive gradient!")
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))

@@ -16,8 +16,8 @@ def bh(m, go, gi):
 	for (i, g) in enumerate(gi):
 		isnan = np.any(np.isnan(g.data.numpy()))
 		if isnan:
-			raise Exception("Grad Input for %s is nan" % m.name)
+			print("Grad Input for %s is nan" % m.name)
 	for (i, g) in enumerate(go):
 		isnan = np.any(np.isnan(g.data.numpy()))
 		if isnan:
-			raise Exception("Grad Output for %s is nan" % m.name)
+			print("Grad Output for %s is nan" % m.name)

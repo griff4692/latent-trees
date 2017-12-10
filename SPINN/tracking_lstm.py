@@ -42,7 +42,7 @@ class TrackingLSTM(nn.Module):
 
             isnan = np.any(np.isnan(prediction.data.numpy()))
             if isnan:
-                raise Exception("Tracking LSTM got faulty outputs")
+                print("Tracking LSTM got faulty outputs")
         return prediction, self.h
 
 

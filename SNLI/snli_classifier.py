@@ -103,7 +103,6 @@ class SNLIClassifier(nn.Module):
             sent_true, sent_pred = None, None
             valences = torch.cat([hyp_valences, prem_valences])
         else:
-            raise
             hyp_encode, hyp_true, hyp_pred, hyp_valences = self.spinn(hyp_embed, hypothesis[1], hypothesis[2], prem_summary, teacher_prob)
             prem_encode, prem_true, prem_pred, prem_valences = self.spinn(prem_embed, premise[1], premise[2], hyp_summary, teacher_prob)
             sent_true = torch.cat([hyp_true, prem_true])

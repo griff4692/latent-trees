@@ -37,15 +37,15 @@ class SPINN(nn.Module):
 
             isnan = np.any(np.isnan(s1[0].data.numpy()))
             if isnan:
-                raise Exception("S1 is nan")
+                print("S1 is nan")
 
             isnan = np.any(np.isnan(s1[0].data.numpy()))
             if isnan:
-                raise Exception("S1 is nan")
+                print("S1 is nan")
 
             isnan = np.any(np.isnan(b.data.numpy()))
             if isnan:
-                raise Exception("Top of buffer is nan")
+                print("Top of buffer is nan")
 
             b_s.append(b); s1_s.append(s1[0]); s2_s.append(s2[0])
 
@@ -92,7 +92,7 @@ class SPINN(nn.Module):
                 print("Is training\n")
             else:
                 print("Is testing\n")
-            raise Exception("Output is nan")
+            print("Output is nan")
 
         # batch normalization and dropout
         if not self.args.no_batch_norm:
