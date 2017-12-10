@@ -131,6 +131,14 @@ def train(args):
                 
         print ("Cost for Epoch ", cost)
 
+def print_string(vocab, list):
+    s = []
+    for i in list:
+        if i != 1:
+            s.append(vocab[i])
+    s.reverse()
+    return " ".join(s)
+
 def eval(args, file, finetune=False):
     label_names, (train_iter, dev_iter, test_iter, inputs), (train_data, dev, test) = prepare_snli_batches(args)
     label_names = label_names[1:]  # don't count UNK
@@ -140,13 +148,14 @@ def eval(args, file, finetune=False):
     correct, total = 0.0, 0.0
     confusion_matrix = np.zeros([num_labels, num_labels])
     dev_iter.init_epoch()
+    good_true = 0; bad_true = 0
+    good_false = 0; bad_false = 0
     if finetune:
         oracle = Oracle(inputs.vocab, train_data)
     for dev_batch_idx, dev_batch in enumerate(dev_iter):
         if finetune:
             step = 0
-            new_train = oracle.find_training_data(dev_batch.hypothesis.split(1,1), dev_batch.premise.split(1,1))
-            print (len(new_train.examples))
+            ids, new_train = oracle.find_training_data(dev_batch.hypothesis.split(1,1), dev_batch.premise.split(1,1))
             train_iter, _, _ = data.BucketIterator.splits(
                 (new_train, dev, test), batch_size=25, device=args.gpu)
             train_iter.repeat = False
@@ -155,6 +164,16 @@ def eval(args, file, finetune=False):
             loss = torch.nn.NLLLoss()
             optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0.001, betas=(0.9, 0.999),
                                    eps=1e-08)
+
+            model.eval()
+            pred_pre = predict(
+                model,
+                (dev_batch.hypothesis.transpose(0, 1),
+                 dev_batch.hypothesis_transitions.t()),
+                (dev_batch.premise.transpose(0, 1),
+                 dev_batch.premise_transitions.t()), args.gpu
+            )
+
             for batch_idx, batch in enumerate(train_iter):
                 model.train()
                 step += 1
@@ -164,6 +183,7 @@ def eval(args, file, finetune=False):
                     (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
                     batch.label - 1, step=step
                 )
+
         model.eval()
         pred = predict(
             model,
@@ -172,6 +192,9 @@ def eval(args, file, finetune=False):
             (dev_batch.premise.transpose(0, 1),
              dev_batch.premise_transitions.t()), args.gpu
         )
+        if not finetune:
+            pred_pre = pred
+
         if args.gpu > -1:
             true_labels = dev_batch.label.data.cpu().numpy() - 1.0
         else:
@@ -179,6 +202,30 @@ def eval(args, file, finetune=False):
         for i in range(num_labels):
             true_labels_by_cat = np.where(true_labels == i)[0]
             pred_values_by_cat = pred[true_labels_by_cat]
+            pred_values_by_cat_pre = pred_pre[true_labels_by_cat]
+
+            zz = pred_values_by_cat_pre[pred_values_by_cat_pre == i]
+            nn = pred_values_by_cat[pred_values_by_cat == i]
+
+            for i1 in true_labels_by_cat.tolist():
+                if (pred[i1] == i and pred_pre[i1] != i):
+                    print (print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()), "---",
+                           print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist()))
+                    print (i1 in ids, i1, label_names[i], label_names[pred_pre[i1]])
+                    if i1 in ids:
+                        good_true += 1
+                    else:
+                        good_false += 1
+
+                if (pred[i1] != i and pred_pre[i1] == i):
+                    print ("******", print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()),
+                           print_string(inputs.vocab.itos,  dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist())), "---",
+                    print (i1 in ids, i1, label_names[pred[i1]], label_names[pred_pre[i1]])
+                    if i1 in ids:
+                        bad_true += 1
+                    else:
+                        bad_false += 1
+
             num_labels_by_cat = len(true_labels_by_cat)
             mass_so_far = 0
             for j in range(num_labels - 1):
@@ -205,11 +252,11 @@ def eval(args, file, finetune=False):
             print("\t%.2f%%" % (perc * 100), end="")
         print("\t(%d examples)\n" % true_label_counts[i])
     sys.stdout.flush()
-
+    print ("Good: ", good_true , "\t" , good_false, " Bad: ", bad_true , "\t", bad_false)
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='SPINN dependency parse + SNLI Classifier arguments.')
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--embed_dim', type=int, default=300)
     parser.add_argument('--hidden_size', type=int, default=300)
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
@@ -227,4 +274,4 @@ if __name__=='__main__':
     render_args(args)
     sys.stdout.flush()
    # train(args)
-    eval(args, "mytraining17.pt", finetune=True)
+    eval(args, "mytraining16.pt", finetune=False)

@@ -22,7 +22,7 @@ class Oracle():
 
     def store_selective_terms(self):
         for i, term in enumerate(self.i_counts):
-            if term < 10:
+            if term < 100:
                 self.sel_terms[i] = []
         for k, i in enumerate(self.examples):
             for h in i.hypothesis:
@@ -48,16 +48,23 @@ class Oracle():
 
     def find_training_data(self, test_hypothesis, test_premise):
         examples = set()
-
-        for h in test_hypothesis:
+        ids = set()
+        prev = len(examples)
+        for i, h in enumerate(test_hypothesis):
             for k in list(h.data.numpy()):
                 examples = examples.union(self.find_examples(k))
-        for p in test_premise:
+                if len(examples) != prev:
+                    ids.add(i)
+                    prev = len(examples)
+        for i, p in enumerate(test_premise):
             for k in list(p.data.numpy()):
                 examples = examples.union(self.find_examples(k))
+                if len(examples) != prev:
+                    ids.add(i)
+                    prev = len(examples)
         train = self.train
         train.examples = list(examples)
-        return train
+        return list(ids), train
 
 if __name__=='__main__':
     data_dir = '.data/snli/snli_1.0/'
