@@ -73,27 +73,38 @@ class ContinuousStack(BaseStack):
         self.args = args
         self.dim = self.args.hidden_size
         self.max_size = max_size
-        self.valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1).zero_(), requires_grad=False))
-        self.cum_valences = cudify(self.args, Variable(torch.FloatTensor(max_size, 1).zero_(), requires_grad=False))
-        self.h = cudify(self.args, Variable(torch.FloatTensor(max_size, self.dim).zero_(), requires_grad=False))
-        self.c = cudify(self.args, Variable(torch.FloatTensor(max_size, self.dim).zero_(), requires_grad=False))
+        self.valences = None # cudify(self.args, Variable(torch.zeros(max_size, 1), requires_grad=False))
+        self.cum_valences = None # cudify(self.args, Variable(torch.zeros(max_size, 1), requires_grad=False))
+        self.h = None # cudify(self.args, Variable(torch.zeros(max_size, self.dim), requires_grad=False))
+        self.c = None # cudify(self.args, Variable(torch.zeros(max_size, self.dim), requires_grad=False))
         self.stack_p = 0
         self.num_pop = 0
-        self.zero_state = Variable(torch.zeros(1, self.dim), requires_grad=False)
+        self.zero_state = Variable(torch.FloatTensor(1, self.dim).zero_(), requires_grad=False)
 
     def one_valence(self):
-        return cudify(self.args, Variable(torch.FloatTensor([1]), requires_grad=False))
+        return cudify(self.args, Variable(torch.FloatTensor([[1.0]]), requires_grad=False))
+
+    def zero_valence(self):
+        return cudify(self.args, Variable(torch.FloatTensor([[0.0]]), requires_grad=False))
 
     def add(self, state, valence, id=0):
         hs, cs = state
-        self.valences[self.stack_p] = valence.clone()
-        if self.stack_p > 0:
-            valence_broad = valence.clone().repeat(self.stack_p).unsqueeze(1)
-            self.cum_valences[0:self.stack_p] = self.cum_valences[0:self.stack_p] + valence_broad
 
-        self.h[self.stack_p, :] = hs
-        self.c[self.stack_p, :] = cs
+        valence = valence.unsqueeze(1)
+        if self.size() == 0:
+            self.valences = valence
+            self.h = hs
+            self.c = cs
+            self.cum_valences = self.zero_valence()
+        else:
+            self.valences = torch.cat([self.valences, valence], dim=0)
+            self.h = torch.cat([self.h, hs], dim=0)
+            self.c = torch.cat([self.c, cs], dim=0)
+            self.cum_valences = self.cum_valences + valence
+            self.cum_valences = torch.cat([self.cum_valences, self.zero_valence()], dim=0)
+
         self.stack_p += 1
+
 
     def peek(self):
         if self.size() == 0:
@@ -101,11 +112,12 @@ class ContinuousStack(BaseStack):
 
         cum_mask = F.relu(1.0 - self.cum_valences) # ReLU
         x = torch.cat([self.valences, cum_mask], dim=1)
-        x_min, _ = torch.min(x, dim=1)
-        read_mask = x_min.unsqueeze(1).expand(self.max_size, self.dim)
 
+        x_min, _ = torch.min(x, dim=1)
+        read_mask = x_min.unsqueeze(1)
         h = torch.mul(read_mask, self.h.clone()).sum(dim=0, keepdim=True)
         c = torch.mul(read_mask, self.c.clone()).sum(dim=0, keepdim=True)
+
         return h, c
 
     def print_stack_state(self):
@@ -118,6 +130,9 @@ class ContinuousStack(BaseStack):
         print("\n\n")
 
     def peek_two(self):
+        if self.size() == 0:
+            return (self.zero_state, self.zero_state), (self.zero_state, self.zero_state)
+
         h1, c1 = self.peek()
 
         valence = self.one_valence()
@@ -126,10 +141,10 @@ class ContinuousStack(BaseStack):
 
         temp_cum_mask = F.relu(1.0 - temp_cum_valences)
         min_val, _ = torch.min(torch.cat([temp_valences, temp_cum_mask], dim=1), dim=1)
-        temp_read_mask = min_val.unsqueeze(1).expand(self.max_size, self.dim)
+        temp_read_mask = min_val.unsqueeze(1)
 
-        h2 = torch.mul(temp_read_mask, self.h.clone()).sum(dim=0, keepdim=True)
-        c2 = torch.mul(temp_read_mask, self.c.clone()).sum(dim=0, keepdim=True)
+        h2 = torch.mul(temp_read_mask, self.h).sum(dim=0, keepdim=True)
+        c2 = torch.mul(temp_read_mask, self.c).sum(dim=0, keepdim=True)
         return (h1, c1), (h2, c2)
 
     def size(self):

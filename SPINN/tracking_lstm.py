@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from utils import cudify
+from utils import cudify, bh
 import numpy as np
 
 class TrackingLSTM(nn.Module):
@@ -10,14 +10,15 @@ class TrackingLSTM(nn.Module):
         self.args = args
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax()
+        self.name = "TRACKING"
         self.tanh = nn.Tanh()
+        self.register_backward_hook(bh)
 
         # buffer, top 2 elements on stack
         self.state_weights = nn.Linear(self.args.hidden_size, 4 * self.args.hidden_size, bias=False)
         self.input_weights = nn.Linear(3 * self.args.hidden_size, 4 * self.args.hidden_size)
         # 2 actions: 0 (Reduce), 1 (Shift)
         self.prediction = nn.Linear(self.args.hidden_size, 2)
-
 
     def initialize_states(self, other_sent):
         self.h, self.c = other_sent

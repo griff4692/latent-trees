@@ -55,21 +55,20 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
 
-    if args.continuous_stack:
-        v1, v2 = valences.split(1, 1)
-        total_loss += torch.pow(v1 - v2, 2).mean()
+    # if args.continuous_stack:
+    #     v1, v2 = valences.split(1, 1)
+    #     total_loss += torch.pow(v1 - v2, 2).mean()
 
     total_loss += get_l2_loss(model, 1e-5)
+
+    print(total_loss.data.numpy())
 
     # Backward
     total_loss.backward()
     for param in model.parameters():
         if param.grad is not None:
             isnan = np.any(np.isnan(param.grad.data.numpy()))
-            isinf = np.any(np.isinf(param.grad.data.numpy()))
-            if isnan or isinf:
-                print(param.grad.data.numpy())
-                print(isnan, isinf)
+            if isnan:
                 raise Exception("Param has explosive gradient!")
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters

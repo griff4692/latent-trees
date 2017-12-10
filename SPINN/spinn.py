@@ -7,7 +7,7 @@ from buffer import Buffer
 from stack import create_stack
 from tracking_lstm import TrackingLSTM
 from random import random
-from utils import cudify
+from utils import cudify, bh
 import math
 import numpy as np
 
@@ -15,6 +15,9 @@ class SPINN(nn.Module):
     def __init__(self, args):
         super(SPINN, self).__init__()
         self.args = args
+
+        self.name = "SPINN"
+        self.register_backward_hook(bh)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_input)
         self.batch_norm1 = nn.BatchNorm1d(self.args.hidden_size * 2)
