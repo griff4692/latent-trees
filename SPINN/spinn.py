@@ -7,7 +7,7 @@ from buffer import Buffer
 from stack import create_stack
 from tracking_lstm import TrackingLSTM
 from random import random
-from utils import cudify, bh
+from utils import cudify
 import math
 import numpy as np
 
@@ -15,9 +15,6 @@ class SPINN(nn.Module):
     def __init__(self, args):
         super(SPINN, self).__init__()
         self.args = args
-
-        self.name = "SPINN"
-        self.register_backward_hook(bh)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_input)
         self.batch_norm1 = nn.BatchNorm1d(self.args.hidden_size * 2)
@@ -73,14 +70,6 @@ class SPINN(nn.Module):
             raise Exception("Sentence is nan")
 
         out = self.word(sentence) # batch, |sent|, h * 2s
-
-        isnan = np.any(np.isnan(out.data.numpy()))
-    #    if isnan:
-    #        if self.training:
-    #            print("Is training\n")
-    #        else:
-    #            print("Is testing\n")
-    #        print("Output is nan")
 
         # batch normalization and dropout
         if not self.args.no_batch_norm:
@@ -191,14 +180,11 @@ class SPINN(nn.Module):
                     reduce_ids.append(b_id)
 
                     r, l = stack_batch[b_id].peek_two()
-                    if not stack_batch[b_id].pop(2.0 * reduce_valence):
+                    if self.args.continuous_stack:
+                        reduce_valence = 2.0 * reduce_valence
+                    if not stack_batch[b_id].pop(reduce_valence):
                         print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
                         raise Exception("Tried to pop from an empty list.")
-
-                    # l = stack_batch[b_id].peek()
-                    # if not stack_batch[b_id].pop(reduce_valence):
-                    #     print(sentence[b_id, :, :].sum(dim=1), transitions[b_id, :])
-                    #     raise Exception("Tried to pop from an empty list.")
 
                     reduce_lh.append(l[0]); reduce_lc.append(l[1])
                     reduce_rh.append(r[0]); reduce_rc.append(r[1])

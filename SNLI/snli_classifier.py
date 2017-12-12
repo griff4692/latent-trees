@@ -4,15 +4,11 @@ import import_spinn
 from spinn import SPINN
 from torch.autograd import Variable
 from actions import HeKaimingInitializer, LayerNormalization
-from utils import cudify, bh
+from utils import cudify
 
 class SNLIClassifier(nn.Module):
     def __init__(self, args, vocab):
         super(SNLIClassifier, self).__init__()
-
-        self.name = "CLASSIFIER"
-        self.register_backward_hook(bh)
-
         padding_idx = vocab.stoi['<pad>']
         self.args = args
         self.embed = nn.Embedding(len(vocab.stoi), self.args.embed_dim, padding_idx=padding_idx)

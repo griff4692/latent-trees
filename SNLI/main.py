@@ -11,6 +11,7 @@ from constants import PAD, SHIFT, REDUCE
 import sys
 from utils import render_args, cudify
 from math import isnan as mathcheck
+from math import sqrt
 
 def add_num_ops_and_shift_acts(args, sent):
     trans = sent[1] - 2
@@ -42,7 +43,7 @@ def get_l2_loss(model, l2_lambda):
             loss += l2_lambda * torch.sum(torch.pow(w, 2))
     return loss
 
-def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob):
+def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher_prob, teach_lambda, valence_lambda):
     sent1, sent2 = add_num_ops_and_shift_acts(args, sent1), \
         add_num_ops_and_shift_acts(args, sent2)
 
@@ -52,23 +53,21 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     fx, sent_true, sent_pred, valences = model(sent1, sent2, teacher_prob)
     logits = F.log_softmax(fx)
     total_loss = loss.forward(logits, y_val)
-    print("Logits loss...%.2f" % total_loss.data.numpy()[0])
 
     if args.teacher and sent_pred is not None and sent_true is not None:
-        total_loss += args.teach_lambda * loss.forward(sent_pred, sent_true)
-
-    if args.continuous_stack:
-        v1, v2 = valences.split(1, 1)
-        total_loss += torch.pow(v1 - v2, 2).mean()
+        total_loss += teach_lambda * loss.forward(sent_pred, sent_true)
+    # if args.continuous_stack:
+    #     v1, v2 = valences.split(1, 1)
+    #     valence_loss = torch.sqrt(torch.abs(v1 - v2)).mean()
+    #     total_loss += valence_lambda * valence_loss
+    #     print(valence_lambda)
+    #     print("Valence loss=%.2f" % valence_loss.data.numpy()[0])
     total_loss += get_l2_loss(model, 1e-5)
 
     # Backward
     total_loss.backward()
     for param in model.parameters():
         if param.grad is not None:
-            # isnan = np.any(np.isnan(param.grad.data.numpy()))
-        #    if isnan:
-        #        print("Param has explosive gradient!")
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
@@ -101,13 +100,19 @@ def train(args):
     teacher_prob = 1.0
 
     for epoch in range(args.epochs):
-        epoch_interp = float(args.epochs - epoch) / float(args.epochs)
-        args.teach_lambda = (epoch_interp * args.teach_lambda_init) + ((1.0 - epoch_interp) * args.teach_lambda_end)
+        scale_coeff = 1.0/(epoch + 1.0)**args.anneal_pow
+        if args.continuous_stack:
+            old = args.teach_lambda_init if epoch == 0 else teach_lambda
+            teach_lambda = scale_coeff * args.teach_lambda_init
+            print("Lowered Teacher Lambda from %.2f to %.2f" % (old, teach_lambda))
+            if teach_lambda <= 0.5:
+                if not args.teacher:
+                    args.teacher = False
+                    print("Turning off teacher forcing!\n")
+
+        valence_lambda = scale_coeff * args.valence_lambda_init
         train_iter.init_epoch()
         cost = 0
-
-        if args.teacher and args.continuous_stack and epoch == 10:
-            args.teacher = False
 
         for batch_idx, batch in enumerate(train_iter):
             model.train()
@@ -119,7 +124,9 @@ def train(args):
                 (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
                 batch.label - 1,
                 step,
-                teacher_prob
+                teacher_prob,
+                teach_lambda,
+                valence_lambda
             )
 
             if count_iter >= args.eval_freq:
@@ -201,14 +208,15 @@ if __name__=='__main__':
     parser.add_argument('-teacher', action='store_true', default=False)
     parser.add_argument('--force_decay', type=float, default=1.0)
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
-    parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
-    parser.add_argument('--teach_lambda_end', type=float, default=0.5)
+    parser.add_argument('--teach_lambda_init', type=float, default=2.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
+    parser.add_argument('--valence_lambda_init', type=float, default=1.0)
+    parser.add_argument('--anneal_pow', default=1.0, type=float)
     parser.add_argument('--experiment', default='default')
 
     args = parser.parse_args()
 
     if args.debug:
-        args.eval_freq = 1000
+        args.eval_freq = 100
 
     if args.continuous_stack:
         assert args.tracking
