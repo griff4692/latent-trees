@@ -28,7 +28,7 @@ def predict(args, model, sent1, sent2, cuda=False):
         add_num_ops_and_shift_acts(args, sent2)
 
     model.eval()
-    output, _, _ = model(sent1, sent2, None)
+    output, _, _, _ = model(sent1, sent2, None)
     logits = F.log_softmax(output)
     if args.gpu > -1:
         return logits.data.cpu().numpy().argmax(axis=1)
@@ -48,7 +48,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
     # Reset gradient
     optimizer.zero_grad()
     # Forward
-    fx, sent_true, sent_pred = model(sent1, sent2, teacher_prob)
+    fx, sent_true, sent_pred, actions = model(sent1, sent2, teacher_prob)
 
     logits = F.log_softmax(fx)
 
@@ -56,6 +56,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
 
     r = -total_loss.data[0]
     flag = 1
+
     for ignored, action in zip(model.spinn.track.ignored, model.spinn.track.actions):
         if not ignored:
             action.reinforce(r)
@@ -79,9 +80,6 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
         if param.grad is not None:
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
 
-  #  for param in model.named_parameters():
-  #      if param[1].grad is None:
-  #          print (param[0])
     # Update parameters
     optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
     optimizer.step()
@@ -187,12 +185,12 @@ def train(args):
 
         teacher_prob *= args.force_decay
         print("Cost for Epoch #%d --> %.2f\n" % (epoch, cost))
-        torch.save(model, './weights/model_%d.pth' % epoch)
+        torch.save(model, './weights/%s_model_%d.pth' % (args.experiment, epoch))
 
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='SPINN dependency parse + SNLI Classifier arguments.')
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--embed_dim', type=int, default=300)
     parser.add_argument('--grad_clip', type=int, default=5)
     parser.add_argument('--hidden_size', type=int, default=150)
@@ -200,7 +198,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=True)
+    parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
@@ -213,6 +211,8 @@ if __name__=='__main__':
     parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
     parser.add_argument('--teach_lambda_end', type=float, default=0.5)
     parser.add_argument('--reinforce', type=bool, default=True)
+    parser.add_argument('--experiment')
+    parser.add_argument('-policy_track', default=False, action='store_true')
 
     args = parser.parse_args()
 

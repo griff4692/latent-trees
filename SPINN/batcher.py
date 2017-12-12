@@ -7,6 +7,7 @@ import sys
 from snli_preprocess import gen_mini, remove_unk, MINI_SIZE
 
 def resolve_data_bug(data_dir):
+    print(os.path.join(data_dir, 'snli_1.0_clean_train.jsonl'))
     if os.path.exists(os.path.join(data_dir, 'snli_1.0_clean_train.jsonl')):
         return "snli_1.0_"
     else:
@@ -19,13 +20,11 @@ def prepare_snli_batches(args):
     data_dir = '.data/snli/snli_1.0/'
 
     pre = resolve_data_bug(data_dir)
-    pre = ""
     train_path = pre + 'clean_train.jsonl'
     validation_path = pre + 'clean_dev.jsonl'
     test_path = pre + 'clean_test.jsonl'
 
-    #debug_train = pre + 'mini_clean_train.jsonl'
-    debug_train = pre + 'tiny_clean_train.jsonl'
+    debug_train = pre + 'mini_clean_train.jsonl'
     debug_validation = pre + 'mini_clean_dev.jsonl'
     debug_test = pre + 'mini_clean_test.jsonl'
 
