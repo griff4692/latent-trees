@@ -56,12 +56,11 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
 
     if args.teacher and sent_pred is not None and sent_true is not None:
         total_loss += teach_lambda * loss.forward(sent_pred, sent_true)
-    # if args.continuous_stack:
-    #     v1, v2 = valences.split(1, 1)
-    #     valence_loss = torch.sqrt(torch.abs(v1 - v2)).mean()
-    #     total_loss += valence_lambda * valence_loss
-    #     print(valence_lambda)
-    #     print("Valence loss=%.2f" % valence_loss.data.numpy()[0])
+
+    if args.continuous_stack:
+        v1, v2 = valences.split(1, 1)
+        valence_loss = torch.clamp(torch.pow((2.0 * v1) - v2, 2.0), 0.0, 5.0).mean()
+        total_loss += valence_lambda * valence_loss
     total_loss += get_l2_loss(model, 1e-5)
 
     # Backward
@@ -70,7 +69,7 @@ def train_batch(args, model, loss, optimizer, sent1, sent2, y_val, step, teacher
         if param.grad is not None:
             param.grad.data.clamp(-args.grad_clip, args.grad_clip)
     # Update parameters
-    optimizer.lr = 0.001 * (0.75 ** (step / 10000.0))
+    optimizer.lr = args.lr * (0.75 ** (step / 10000.0))
     optimizer.step()
     return total_loss.data[0]
 
@@ -101,7 +100,8 @@ def train(args):
 
     for epoch in range(args.epochs):
         scale_coeff = 1.0/(epoch + 1.0)**args.anneal_pow
-        if args.continuous_stack:
+        teach_lambda = 0.0
+        if args.continuous_stack and args.teacher:
             old = args.teach_lambda_init if epoch == 0 else teach_lambda
             teach_lambda = scale_coeff * args.teach_lambda_init
             print("Lowered Teacher Lambda from %.2f to %.2f" % (old, teach_lambda))
