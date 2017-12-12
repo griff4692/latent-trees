@@ -60,7 +60,7 @@ def train_batch(args, model, loss, optimizer, hyp, prem, targets, step, teacher_
     # Reset gradient
     optimizer.zero_grad()
     # Forward
-    fx, sent_true, sent_pred, hyp_track_state, prem_track_state = model(hyp, prem, teacher_prob)
+    fx, sent_true, sent_pred, (hyp_track_state, prem_track_state), (hyp_actions, prem_actions) = model(hyp, prem, teacher_prob)
 
     total_loss = nll_no_reduce(fx, targets)
 
@@ -203,7 +203,7 @@ def train(args):
 
         teacher_prob *= args.force_decay
         print("Cost for Epoch #%d --> %.2f\n" % (epoch, cost))
-        torch.save(model, './weights/model_%d.pth' % epoch)
+        torch.save(model, './weights/%s_model_%d.pth' % (args.experiment, epoch))
 
 
 if __name__=='__main__':
@@ -230,6 +230,8 @@ if __name__=='__main__':
     parser.add_argument('--teach_lambda_end', type=float, default=0.5)
     parser.add_argument('--reinforce', type=bool, default=True)
     parser.add_argument('--reward_clip', type=float, default=2.5)
+    parser.add_argument('--experiment')
+    parser.add_argument('-policy_track', default=False, action='store_true')
 
     args = parser.parse_args()
 

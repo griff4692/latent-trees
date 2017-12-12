@@ -30,7 +30,47 @@ class SNLIClassifier(nn.Module):
         HeKaimingInitializer(self.output.weight)
         self.spinn = SPINN(self.args)
 
+        self.encoder = nn.LSTM(input_size=self.args.embed_dim, hidden_size=self.args.hidden_size // 2,
+            batch_first=True, bidirectional=False, num_layers=1, dropout=self.args.dropout_rate_input)
         self.init_lstm_state = cudify(args, Variable(torch.zeros(1, 1, self.args.hidden_size // 2), requires_grad=False))
+
+    def encode_sent(self, sent):
+        timesteps = sent.split(1, 1)
+        n = len(timesteps)
+
+        for_hs = [None] * n
+        back_hs = [None] * n
+        for_cs = [None] * n
+        back_cs = [None] * n
+
+        # forward pass
+        init_h, init_c = self.init_lstm_state.repeat(1, sent.size()[0], 1), self.init_lstm_state.repeat(1, sent.size()[0], 1)
+        prev_h, prev_c = init_h, init_c
+        for i in range(n):
+            _, (step_h, step_c) = self.encoder(timesteps[i], (prev_h, prev_c))
+            for_hs[i] = step_h
+            for_cs[i] = step_c
+            prev_h, prev_c = step_h, step_c
+
+        prev_h, prev_c = init_h, init_c
+        for i in range(n - 1, -1 , -1):
+            _, (step_h, step_c) = self.encoder(timesteps[i], (prev_h, prev_c))
+            back_hs[i] = step_h
+            back_cs[i] = step_c
+            prev_h, prev_c = step_h, step_c
+
+        for_hs, for_cs = torch.cat(for_hs), torch.cat(for_cs)
+        back_hs, back_cs = torch.cat(back_hs), torch.cat(back_cs)
+
+        full_hs = torch.cat([for_hs, back_hs], dim=2).transpose(0, 1)
+        full_cs = torch.cat([for_cs, back_cs], dim=2).transpose(0, 1)
+
+        last_for_hs, last_back_hs = for_hs[-1], back_hs[0]
+        last_for_cs, last_back_cs = for_cs[-1], back_cs[0]
+
+        summary_h = torch.cat([last_for_hs, last_back_hs], dim=1)
+        summary_c = torch.cat([last_for_cs, last_back_cs], dim=1)
+        return (summary_h, summary_c)
 
     def set_weight(self, weight):
         self.embed.weight.data.copy_(torch.from_numpy(weight))
@@ -47,17 +87,17 @@ class SNLIClassifier(nn.Module):
         prem_embed = self.embed(premise[0])
 
         hyp_trans, prem_trans = hypothesis[1], premise[1]
+        hyp_summary = self.encode_sent(hyp_embed)
+        prem_summary = self.encode_sent(prem_embed)
 
         if not self.args.teacher or not self.training:
             if self.args.tracking:
                 hyp_trans, prem_trans = None, None
-
-            hyp_encode, _, _, hyp_track_state = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
-            prem_encode, _, _, prem_track_state = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
-            sent_true, sent_pred = None, None
+            hyp_encode, sent_true, sent_pred, hyp_track_state, hyp_actions = self.spinn(hyp_embed, hyp_trans, hypothesis[2], prem_summary, teacher_prob)
+            prem_encode, sent_true, sent_pred, prem_track_state, prem_actions = self.spinn(prem_embed, prem_trans, premise[2], hyp_summary, teacher_prob)
         else:
-            hyp_encode, hyp_true, hyp_pred, hyp_track_state = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
-            prem_encode, prem_true, prem_pred, prem_track_state = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
+            hyp_encode, hyp_true, hyp_pred, hyp_track_state, hyp_actions = self.spinn(hyp_embed, hyp_trans, hypothesis[2], prem_summary, teacher_prob)
+            prem_encode, prem_true, prem_pred, prem_track_state, prem_actions = self.spinn(prem_embed, prem_trans, premise[2], hyp_summary, teacher_prob)
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
 
@@ -82,4 +122,4 @@ class SNLIClassifier(nn.Module):
             features = self.dropout(features)
 
         output = self.output(features)
-        return output, sent_true, sent_pred, hyp_track_state, prem_track_state
+        return output, sent_true, sent_pred, (hyp_track_state, prem_track_state), (hyp_actions, prem_actions)
