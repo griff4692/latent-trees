@@ -28,8 +28,8 @@ class TrackingLSTM(nn.Module):
     def lstm(self, inputs, prev_actions):
         h = self.state_weights(self.h) # batch, 4 * dim
 
-        prev_actions += 1
-        prev_act_embeds = self.act_embed(cudify(self.args, Variable(torch.LongTensor(prev_actions))))
+        prev_acts_plus = prev_actions + 1
+        prev_act_embeds = self.act_embed(cudify(self.args, Variable(torch.LongTensor(prev_acts_plus))))
         features = torch.cat([inputs, prev_act_embeds], dim=-1)
         inputs_transform = self.input_weights(features)
 
@@ -86,8 +86,8 @@ class PolicyTrackingLSTM(nn.Module):
     def lstm(self, inputs, prev_actions):
         h = self.state_weights(self.h) # batch, 4 * dim
 
-        prev_actions += 1
-        prev_act_embeds = self.act_embed(cudify(self.args, Variable(torch.LongTensor(prev_actions))))
+        prev_act_plus = prev_actions + 1
+        prev_act_embeds = self.act_embed(cudify(self.args, Variable(torch.LongTensor(prev_act_plus))))
         features = torch.cat([inputs.detach(), prev_act_embeds], dim=-1)
         inputs_transform = self.input_weights(features)
         x_plus_h = h + inputs_transform
@@ -125,8 +125,8 @@ class PolicyNetwork(nn.Module):
 
 
     def network(self, inputs, prev_actions):
-        prev_actions += 1
-        prev_act_embeds = self.act_embed(cudify(self.args, Variable(torch.LongTensor(prev_actions))))
+        prev_act_plus = prev_actions + 1
+        prev_act_embeds = self.act_embed(cudify(self.args, Variable(torch.LongTensor(prev_act_plus))))
         features = torch.cat([inputs.detach(), prev_act_embeds], dim=-1)
 
         inputs_transform = self.input_weights(features)

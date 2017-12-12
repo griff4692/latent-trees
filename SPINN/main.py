@@ -51,6 +51,23 @@ def get_l2_loss(model, l2_lambda):
             loss += l2_lambda * torch.sum(torch.pow(w, 2))
     return loss
 
+def edit_distance(actions, num_ops):
+    batch_size, max_ops = actions.shape
+    distances = np.zeros([batch_size, 1])
+
+    for b_id in range(batch_size):
+        n_op = num_ops[b_id]
+        sent_size = (n_op - 1) // 2
+        mask = np.zeros([n_op,])
+        mask.fill(-1.0)
+        mask[:sent_size].fill(SHIFT)
+        mask[sent_size:n_op].fill(REDUCE)
+
+        agreement = (mask == actions[b_id])
+        agree_counts = np.count_nonzero(agreement) - (max_ops - n_op)
+        distances[b_id, 0] = (2.0 * agree_counts / float(n_op)) - 1.0
+    return distances
+
 def train_batch(args, model, loss, optimizer, hyp, prem, targets, step, teacher_prob):
     hyp, prem = add_num_ops_and_shift_acts(args, hyp), \
         add_num_ops_and_shift_acts(args, prem)
@@ -64,21 +81,29 @@ def train_batch(args, model, loss, optimizer, hyp, prem, targets, step, teacher_
 
     total_loss = nll_no_reduce(fx, targets)
 
+    hyp_balanced_distance = torch.FloatTensor(edit_distance(hyp_actions, hyp[2]))
+    prem_balanced_distance = torch.FloatTensor(edit_distance(prem_actions, prem[2]))
+
     # propagate across sentences
     rewards = torch.clamp((-total_loss.data - log(0.33)), -args.reward_clip, args.reward_clip).unsqueeze(1)
     hyp_rewards = rewards.repeat(1, max_hyp_ops)
     hyp_actions, hyp_ignored_actions = hyp_track_state
     for (batch_idx, timestep) in hyp_ignored_actions:
         hyp_rewards[batch_idx, timestep] = 0.0
+
     for (timestep, action_set) in enumerate(hyp_actions):
-        action_set.reinforce(hyp_rewards[:, timestep].unsqueeze(1))
+        hyp_reward = hyp_rewards[:, timestep].unsqueeze(1)
+        hyp_interp_reward = (args.reward_interp * hyp_balanced_distance) + ((1.0 - args.reward_interp) * hyp_reward)
+        action_set.reinforce(hyp_interp_reward)
 
     prem_rewards = rewards.repeat(1, max_prem_ops)
     prem_actions, prem_ignored_actions = prem_track_state
     for (batch_idx, timestep) in prem_ignored_actions:
             prem_rewards[batch_idx, timestep] = 0.0
     for (timestep, action_set) in enumerate(prem_actions):
-        action_set.reinforce(prem_rewards[:, timestep].unsqueeze(1))
+        prem_reward = prem_rewards[:, timestep].unsqueeze(1)
+        prem_interp_reward = (args.reward_interp * prem_balanced_distance) + ((1.0 - args.reward_interp) * prem_reward)
+        action_set.reinforce(prem_interp_reward)
 
     flat_hyp_actions = torch.cat(hyp_actions, dim=1).view(-1)
     flat_prem_actions = torch.cat(prem_actions, dim=1).view(-1)
@@ -232,6 +257,7 @@ if __name__=='__main__':
     parser.add_argument('--reward_clip', type=float, default=2.5)
     parser.add_argument('--experiment')
     parser.add_argument('-policy_track', default=False, action='store_true')
+    parser.add_argument('--reward_interp', default=0.25, type=float)
 
     args = parser.parse_args()
 

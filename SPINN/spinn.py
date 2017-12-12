@@ -180,6 +180,7 @@ class SPINN(nn.Module):
                     reduce_valence, shift_valence = None, None
 
                 no_action = True
+                chosen_actions[b_id, time_stamp] = act
                 # 2 - REDUCE
                 if act == REDUCE or (self.args.continuous_stack and not self.args.teacher and stack_size >= 2):
                     no_action = False
