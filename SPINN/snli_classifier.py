@@ -17,15 +17,15 @@ class SNLIClassifier(nn.Module):
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
 
-        self.layer_norm_mlp_input = LayerNormalization(4 * self.args.hidden_size)
-        self.layer_norm_mlp1_hidden = LayerNormalization(self.args.snli_h_dim)
+        self.layer_norm_mlp_input = LayerNormalization(8 * self.args.hidden_size)
+        self.layer_norm_mlp1_hidden = LayerNormalization(2 * self.args.snli_h_dim)
         self.layer_norm_mlp2_hidden = LayerNormalization(self.args.snli_h_dim)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_classify)
 
-        self.mlp1 = nn.Linear(4 * self.args.hidden_size, self.args.snli_h_dim)
+        self.mlp1 = nn.Linear(8 * self.args.hidden_size, 2 * self.args.snli_h_dim)
         HeKaimingInitializer(self.mlp1.weight)
-        self.mlp2 = nn.Linear(self.args.snli_h_dim, self.args.snli_h_dim)
+        self.mlp2 = nn.Linear(2 * self.args.snli_h_dim, self.args.snli_h_dim)
         HeKaimingInitializer(self.mlp2.weight)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
@@ -101,10 +101,9 @@ class SNLIClassifier(nn.Module):
             sent_pred = torch.cat([hyp_pred, prem_pred])
 
 
-        p = rprem_encode + prem_encode
-        h = rhyp_encode + hyp_encode
+        p = torch.cat([rprem_encode, prem_encode], dim=1)
+        h = torch.cat([rhyp_encode, hyp_encode], dim=1)
         features = self.prepare_features(h, p)
-
         features = self.layer_norm_mlp_input(features)
 
         if self.args.dropout_rate_classify > 0:

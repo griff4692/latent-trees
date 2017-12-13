@@ -189,7 +189,7 @@ if __name__=='__main__':
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
     parser.add_argument('--dropout_rate_classify', type=float, default=0.1)
     parser.add_argument('-no_batch_norm', action='store_true', default=False)
-    parser.add_argument('-tracking', action='store_true', default=False)
+    parser.add_argument('-tracking', action='store_true', default=True)
     parser.add_argument('-teacher', action='store_true', default=False)
     parser.add_argument('--force_decay', type=float, default=1.0)
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
