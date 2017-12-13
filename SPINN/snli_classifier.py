@@ -17,16 +17,22 @@ class SNLIClassifier(nn.Module):
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
 
-        self.layer_norm_mlp_input = LayerNormalization(8 * self.args.hidden_size)
+        self.proj1 = nn.Linear(3 * self.args.hidden_size, 3 * self.args.hidden_size)
+        self.proj2 = nn.Linear(3 * self.args.hidden_size, self.args.hidden_size)
+        mult = 4 if self.args.proj else 12
+
+        self.layer_norm_mlp_input = LayerNormalization(mult * self.args.hidden_size)
         self.layer_norm_mlp1_hidden = LayerNormalization(2 * self.args.snli_h_dim)
         self.layer_norm_mlp2_hidden = LayerNormalization(self.args.snli_h_dim)
 
         self.dropout = nn.Dropout(p=self.args.dropout_rate_classify)
 
-        self.mlp1 = nn.Linear(8 * self.args.hidden_size, 2 * self.args.snli_h_dim)
+        self.mlp1 = nn.Linear(mult * self.args.hidden_size, 2 * self.args.snli_h_dim)
         HeKaimingInitializer(self.mlp1.weight)
         self.mlp2 = nn.Linear(2 * self.args.snli_h_dim, self.args.snli_h_dim)
         HeKaimingInitializer(self.mlp2.weight)
+
+        self.modelling = nn.LSTM(input_size=self.args.hidden_size * 2, hidden_size=self.args.hidden_size // 2, bidirectional=True, dropout=0.2, batch_first=True, num_layers=1)
 
         self.output = nn.Linear(self.args.snli_h_dim, 3)
         HeKaimingInitializer(self.output.weight)
@@ -84,25 +90,43 @@ class SNLIClassifier(nn.Module):
             if self.args.tracking:
                 hyp_trans, prem_trans = None, None
 
-            hyp_encode = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
-            prem_encode = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
+            hyp_encode, hyp_track_states = self.spinn(hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
+            prem_encode, prem_track_states = self.spinn(prem_embed, prem_trans, premise[2], teacher_prob)
 
-            rhyp_encode = self.spinn(rev_hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
-            rprem_encode = self.spinn(rev_prem_embed, prem_trans, premise[2], teacher_prob)
+            rhyp_encode, rhyp_track_states = self.spinn(rev_hyp_embed, hyp_trans, hypothesis[2], teacher_prob)
+            rprem_encode, rprem_track_states = self.spinn(rev_prem_embed, prem_trans, premise[2], teacher_prob)
+
             sent_true, sent_pred = None, None
         else:
-            hyp_encode, hyp_true, hyp_pred = self.spinn(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
-            prem_encode, prem_true, prem_pred = self.spinn(prem_embed, premise[1], premise[2], teacher_prob)
+            hyp_encode, hyp_true, hyp_pred, hyp_track_states = self.spinn(hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
+            prem_encode, prem_true, prem_pred, prem_track_states = self.spinn(prem_embed, premise[1], premise[2], teacher_prob)
 
-            rhyp_encode, rhyp_true, rhyp_pred = self.spinn(rev_hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
-            rprem_encode, rprem_true, rprem_pred = self.spinn(rev_prem_embed, premise[1], premise[2], teacher_prob)
+            rhyp_encode, rhyp_true, rhyp_pred, rhyp_track_states = self.spinn(rev_hyp_embed, hypothesis[1], hypothesis[2], teacher_prob)
+            rprem_encode, rprem_true, rprem_pred, rprem_track_states = self.spinn(rev_prem_embed, premise[1], premise[2], teacher_prob)
 
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
 
 
-        p = torch.cat([rprem_encode, prem_encode], dim=1)
-        h = torch.cat([rhyp_encode, hyp_encode], dim=1)
+        hf = torch.cat([hyp_track_states, rhyp_track_states], dim=-1)
+        _, (hyp_model, _) = self.modelling(hf)
+
+        pf = torch.cat([prem_track_states, rprem_track_states], dim=-1)
+        _, (prem_model, _) = self.modelling(pf)
+
+        prem_model = prem_model.transpose(1, 0).contiguous().view(prem_encode.size()[0], -1)
+        hyp_model = hyp_model.transpose(1, 0).contiguous().view(hyp_encode.size()[0], -1)
+
+        p = torch.cat([rprem_encode, prem_encode, prem_model], dim=-1)
+        h = torch.cat([rhyp_encode, hyp_encode, hyp_model], dim=-1)
+
+        if self.args.proj:
+            p = self.dropout(self.relu(self.proj1(p)))
+            p = self.dropout(self.relu(self.proj2(p)))
+
+            h = self.dropout(self.relu(self.proj1(h)))
+            h = self.dropout(self.relu(self.proj2(h)))
+
         features = self.prepare_features(h, p)
         features = self.layer_norm_mlp_input(features)
 

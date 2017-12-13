@@ -101,7 +101,7 @@ class SPINN(nn.Module):
                 in list(torch.split(transitions, 1, 1))]
             num_transitions = len(transitions_batch)
 
-        lstm_actions, true_actions = [], []
+        lstm_actions, true_actions, tracking_states = [], [], []
 
         for time_stamp in range(num_transitions):
             ops_left = num_transitions - time_stamp
@@ -114,6 +114,7 @@ class SPINN(nn.Module):
             teacher_valences = None
             if self.args.tracking:
                 valences, tracking_state = self.update_tracker(buffer_batch, stack_batch, batch_size)
+                tracking_states.append(tracking_state.unsqueeze(1))
                 _, pred_trans = valences.max(dim=1)
                 if self.training and self.args.teacher:
                     use_teacher = True # TODO for now always use teacher - later --> random() < teacher_prob
@@ -218,6 +219,7 @@ class SPINN(nn.Module):
             top_h = stack.peek()[0]
             outputs.append(top_h)
 
+        tracking_states = torch.cat(tracking_states, dim=1)
         if len(true_actions) > 0 and self.training:
-            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions))
-        return torch.cat(outputs)
+            return torch.cat(outputs), torch.cat(true_actions), torch.log(torch.cat(lstm_actions)), tracking_states
+        return torch.cat(outputs), tracking_states

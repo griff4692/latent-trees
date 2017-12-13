@@ -12,8 +12,6 @@ import sys
 from utils import render_args, cudify
 
 
-
-
 def add_num_ops_and_shift_acts(args, sent):
     trans = sent[1] - 2
     max_ops = trans.size()[1]
@@ -171,6 +169,7 @@ def train(args):
                 sys.stdout.flush()
 
         teacher_prob *= args.force_decay
+        torch.save(model, 'weights/%s_model_%d.tar' % (args.experiment, epoch))
         print("Cost for Epoch #%d --> %.2f\n" % (epoch, cost))
 
 if __name__=='__main__':
@@ -183,7 +182,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=True)
+    parser.add_argument('-debug', action='store_true', default=False)
     parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
@@ -194,7 +193,9 @@ if __name__=='__main__':
     parser.add_argument('--force_decay', type=float, default=1.0)
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
     parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
+    parser.add_argument('--experiment')
     parser.add_argument('--teach_lambda_end', type=float, default=0.5)
+    parser.add_argument('-proj', default=False, action='store_true')
 
     args = parser.parse_args()
 

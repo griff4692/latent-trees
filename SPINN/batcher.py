@@ -19,7 +19,7 @@ def prepare_snli_batches(args):
     data_dir = '.data/snli/snli_1.0/'
 
     pre = resolve_data_bug(data_dir)
-    pre = ""
+    # pre = ""
     train_path = pre + 'clean_train.jsonl'
     validation_path = pre + 'clean_dev.jsonl'
     test_path = pre + 'clean_test.jsonl'
