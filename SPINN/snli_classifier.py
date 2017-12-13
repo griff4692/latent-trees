@@ -20,6 +20,8 @@ class SNLIClassifier(nn.Module):
         self.proj1 = nn.Linear(3 * self.args.hidden_size, 3 * self.args.hidden_size)
         self.proj2 = nn.Linear(3 * self.args.hidden_size, self.args.hidden_size)
         mult = 4 if self.args.proj else 12
+        if not self.args.model:
+            mult = 8
 
         self.layer_norm_mlp_input = LayerNormalization(mult * self.args.hidden_size)
         self.layer_norm_mlp1_hidden = LayerNormalization(2 * self.args.snli_h_dim)
@@ -107,18 +109,21 @@ class SNLIClassifier(nn.Module):
             sent_true = torch.cat([hyp_true, prem_true])
             sent_pred = torch.cat([hyp_pred, prem_pred])
 
+        if self.args.model:
+            hf = torch.cat([hyp_track_states, rhyp_track_states], dim=-1)
+            _, (hyp_model, _) = self.modelling(hf)
+            hyp_model = hyp_model.transpose(1, 0).contiguous().view(hyp_encode.size()[0], -1)
+            h = torch.cat([rhyp_encode, hyp_encode, hyp_model], dim=-1)
+        else:
+            h = torch.cat([rhyp_encode, hyp_encode], dim=-1)
 
-        hf = torch.cat([hyp_track_states, rhyp_track_states], dim=-1)
-        _, (hyp_model, _) = self.modelling(hf)
-
-        pf = torch.cat([prem_track_states, rprem_track_states], dim=-1)
-        _, (prem_model, _) = self.modelling(pf)
-
-        prem_model = prem_model.transpose(1, 0).contiguous().view(prem_encode.size()[0], -1)
-        hyp_model = hyp_model.transpose(1, 0).contiguous().view(hyp_encode.size()[0], -1)
-
-        p = torch.cat([rprem_encode, prem_encode, prem_model], dim=-1)
-        h = torch.cat([rhyp_encode, hyp_encode, hyp_model], dim=-1)
+        if self.args.model:
+            pf = torch.cat([prem_track_states, rprem_track_states], dim=-1)
+            _, (prem_model, _) = self.modelling(pf)
+            prem_model = prem_model.transpose(1, 0).contiguous().view(prem_encode.size()[0], -1)
+            p = torch.cat([rprem_encode, prem_encode, prem_model], dim=-1)
+        else:
+            p = torch.cat([rprem_encode, prem_encode], dim=-1)
 
         if self.args.proj:
             p = self.dropout(self.relu(self.proj1(p)))

@@ -193,11 +193,15 @@ if __name__=='__main__':
     parser.add_argument('--force_decay', type=float, default=1.0)
     parser.add_argument('--gpu', type=int, default=-1, help='-1 for cpu. 0 for gpu')
     parser.add_argument('--teach_lambda_init', type=float, default=4.0, help='relative contribution of SNLI classifier versus dependency transitions to loss.')
+    parser.add_argument('-model', action='store_true', default=False)
     parser.add_argument('--experiment')
     parser.add_argument('--teach_lambda_end', type=float, default=0.5)
     parser.add_argument('-proj', default=False, action='store_true')
 
     args = parser.parse_args()
+    
+    if not args.model:
+        assert not args.proj
 
     if args.debug:
         args.eval_freq = 10
