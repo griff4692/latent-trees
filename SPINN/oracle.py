@@ -10,8 +10,17 @@ class Oracle():
         self.examples = train.examples
         self.i_counts = [0] * len(self.i2w)
         self.find_counts()
-        self.sel_terms = {}
+        self.sel_hyp_terms = {}
+        self.sel_prem_terms = {}
         self.store_selective_terms()
+
+    def print_string(self, list):
+        s = []
+        for i in list:
+            if i != 1:
+                s.append(self.i2w[i])
+        s.reverse()
+        return " ".join(s)
 
     def find_counts(self):
         for i in self.examples:
@@ -22,27 +31,37 @@ class Oracle():
 
     def store_selective_terms(self):
         for i, term in enumerate(self.i_counts):
-            if term < 100:
-                self.sel_terms[i] = []
+            if term < 1000:
+                self.sel_prem_terms[i] = []
+                self.sel_hyp_terms[i] = []
         for k, i in enumerate(self.examples):
             for h in i.hypothesis:
                 id = self.w2i.get(h, 0)
-                if id in self.sel_terms:
-                    self.sel_terms[id].append(k)
+                if id in self.sel_hyp_terms:
+                    self.sel_hyp_terms[id].append(k)
 
             for p in i.premise:
                 id = self.w2i.get(p, 0)
-                if id in self.sel_terms:
-                    if k not in self.sel_terms[id]:
-                        self.sel_terms[id].append(k)
+                if id in self.sel_prem_terms:
+                    self.sel_prem_terms[id].append(k)
 
-    def find_examples(self, id):
+    def find_examples(self, id, hyp=True):
         id = int(id)
-        if id not in self.sel_terms.keys():
-            return []
         examples = set()
-        for i in self.sel_terms[id]:
-            examples.add(self.examples[i])
+        if hyp:
+            if id not in self.sel_hyp_terms.keys():
+                return set()
+            if len(self.sel_hyp_terms[id]) == 0:
+                return set()
+            for i in self.sel_hyp_terms[id]:
+                examples.add(self.examples[i])
+        else:
+            if id not in self.sel_prem_terms.keys():
+                return set()
+            if len(self.sel_prem_terms[id]) == 0:
+                return  set()
+            for i in self.sel_prem_terms[id]:
+                examples.add(self.examples[i])
         return examples
 
 
@@ -50,18 +69,15 @@ class Oracle():
         examples = set()
         ids = set()
         prev = len(examples)
-        for i, h in enumerate(test_hypothesis):
-            for k in list(h.data.numpy()):
-                examples = examples.union(self.find_examples(k))
+        for i, (h, p) in enumerate(zip(test_hypothesis, test_premise)):
+            for k, j in zip(list(h.data.numpy()),list(p.data.numpy())):
+                e1 = self.find_examples(k, hyp=True)
+                e2 = e1.intersection(self.find_examples(j, hyp=False))
+                examples = examples.union(e2)
                 if len(examples) != prev:
                     ids.add(i)
                     prev = len(examples)
-        for i, p in enumerate(test_premise):
-            for k in list(p.data.numpy()):
-                examples = examples.union(self.find_examples(k))
-                if len(examples) != prev:
-                    ids.add(i)
-                    prev = len(examples)
+
         train = self.train
         train.examples = list(examples)
         return list(ids), train

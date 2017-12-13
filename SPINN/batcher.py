@@ -30,7 +30,7 @@ def prepare_snli_batches(args):
 
         print ("Using first %d examples for development purposes..." % MINI_SIZE)
         train, dev, test = datasets.SNLI.splits(inputs, answers, transitions,
-            train=debug_train, validation=debug_validation, test=debug_test)
+            train=train_path, validation=debug_validation, test=debug_test)
     else:
         print ("Train Path ", train_path)
         train, dev, test = datasets.SNLI.splits(inputs, answers, transitions, train=train_path, validation=validation_path, test=test_path)

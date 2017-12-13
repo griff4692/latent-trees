@@ -159,6 +159,15 @@ def eval(args, file, finetune=False):
             train_iter, _, _ = data.BucketIterator.splits(
                 (new_train, dev, test), batch_size=25, device=args.gpu)
             train_iter.repeat = False
+            print(print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0, 1)[0].data.numpy().tolist()), "---",
+                                 print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[0].data.numpy().tolist()), label_names[dev_batch.label.data[0] - 1])
+
+            for i in new_train.examples:
+                print("\t",  " ".join(i.hypothesis),
+                     "---",
+                      " ".join(i.premise),
+                     i.label)
+
             model = torch.load(file, map_location=lambda storage, loc: storage)
             model.cpu()
             loss = torch.nn.NLLLoss()
@@ -207,24 +216,24 @@ def eval(args, file, finetune=False):
             zz = pred_values_by_cat_pre[pred_values_by_cat_pre == i]
             nn = pred_values_by_cat[pred_values_by_cat == i]
 
-            for i1 in true_labels_by_cat.tolist():
-                if (pred[i1] == i and pred_pre[i1] != i):
-                    print (print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()), "---",
-                           print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist()))
-                    print (i1 in ids, i1, label_names[i], label_names[pred_pre[i1]])
-                    if i1 in ids:
-                        good_true += 1
-                    else:
-                        good_false += 1
-
-                if (pred[i1] != i and pred_pre[i1] == i):
-                    print ("******", print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()),
-                           print_string(inputs.vocab.itos,  dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist())), "---",
-                    print (i1 in ids, i1, label_names[pred[i1]], label_names[pred_pre[i1]])
-                    if i1 in ids:
-                        bad_true += 1
-                    else:
-                        bad_false += 1
+            # for i1 in true_labels_by_cat.tolist():
+            #    if (pred[i1] == i and pred_pre[i1] != i):
+            #        print (print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()), "---",
+            #               print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist()))
+            #        print (i1 in ids, i1, label_names[i], label_names[pred_pre[i1]])
+            #        if i1 in ids:
+            #            good_true += 1
+            #        else:
+            #          good_false += 1
+            #
+            #    if (pred[i1] != i and pred_pre[i1] == i):
+            #        print ("******", print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()),
+            #               print_string(inputs.vocab.itos,  dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist())), "---",
+            #        print (i1 in ids, i1, label_names[pred[i1]], label_names[pred_pre[i1]])
+            #        if i1 in ids:
+            #            bad_true += 1
+            #        else:
+            #            bad_false += 1
 
             num_labels_by_cat = len(true_labels_by_cat)
             mass_so_far = 0
@@ -256,14 +265,14 @@ def eval(args, file, finetune=False):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='SPINN dependency parse + SNLI Classifier arguments.')
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--embed_dim', type=int, default=300)
     parser.add_argument('--hidden_size', type=int, default=300)
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('-continuous_stack', action='store_true', default=False)
     parser.add_argument('--eval_freq', type=int, default=50000, help='number of examples between evaluation on dev set.')
-    parser.add_argument('-debug', action='store_true', default=False)
+    parser.add_argument('-debug', action='store_true', default=True)
     parser.add_argument('--snli_num_h_layers', type=int, default=2, help='tunable hyperparameter.')
     parser.add_argument('--snli_h_dim', type=int, default=1024, help='1024 is used by paper.')
     parser.add_argument('--dropout_rate_input', type=float, default=0.1)
@@ -274,4 +283,4 @@ if __name__=='__main__':
     render_args(args)
     sys.stdout.flush()
    # train(args)
-    eval(args, "mytraining16.pt", finetune=False)
+    eval(args, "mytraining16.pt", finetune=True)
