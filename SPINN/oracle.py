@@ -64,11 +64,22 @@ class Oracle():
                 examples.add(self.examples[i])
         return examples
 
+    def get_jaccard(self, s1, s2):
+        s1_l = []
+        for i in s1:
+            s1_l.append(self.i2w[i])
+
+        set1 = set(s1_l)
+        set2 = set(s2)
+        jaccard = len(set1.intersection(set2)) * 1.0 / (len(set2.union(set1)))
+        return jaccard
 
     def find_training_data(self, test_hypothesis, test_premise):
         examples = set()
         ids = set()
         prev = len(examples)
+        sim = {}
+        print (len(test_premise))
         for i, (h, p) in enumerate(zip(test_hypothesis, test_premise)):
             for k, j in zip(list(h.data.numpy()),list(p.data.numpy())):
                 e1 = self.find_examples(k, hyp=True)
@@ -77,10 +88,21 @@ class Oracle():
                 if len(examples) != prev:
                     ids.add(i)
                     prev = len(examples)
+            for e in examples:
+                k = sim.get(i, [])
+                a,b= [],[]
+                for k1, j in zip(list(h.data.numpy()), list(p.data.numpy())):
+                    a.append(k1[0]); b.append(j[0])
+                k.append(min(self.get_jaccard(a, e.hypothesis),self.get_jaccard(b, e.premise)))
+
+                sim[i] = k
+
+
 
         train = self.train
         train.examples = list(examples)
-        return list(ids), train
+
+        return list(ids), train, sim
 
 if __name__=='__main__':
     data_dir = '.data/snli/snli_1.0/'
@@ -96,7 +118,7 @@ if __name__=='__main__':
     train, dev, test = datasets.SNLI.splits(inputs, answers, transitions, train=train_path, validation=validation_path,
                                             test=test_path)
     inputs.build_vocab(train, dev, test)
-    print (train.examples[0].hypothesis)
+    print (train.examples[0].hypothesis_transitions)
     print ("begin")
     oracle = Oracle(inputs.vocab, train)
     new_train = oracle.find_training_data(dev.examples)
