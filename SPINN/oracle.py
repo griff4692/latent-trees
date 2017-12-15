@@ -1,6 +1,7 @@
 from torchtext import datasets
 from torchtext import data
 import copy
+from utils import tree_edit
 
 class Oracle():
     def __init__(self, vocab, train):
@@ -74,13 +75,14 @@ class Oracle():
         jaccard = len(set1.intersection(set2)) * 1.0 / (len(set2.union(set1)))
         return jaccard
 
-    def find_training_data(self, test_hypothesis, test_premise):
+    def find_training_data(self, test_hypothesis, test_premise, trans_hyp, trans_prem):
         examples = set()
         ids = set()
         prev = len(examples)
         sim = {}
+        tree_sim = {}
         print (len(test_premise))
-        for i, (h, p) in enumerate(zip(test_hypothesis, test_premise)):
+        for i, (h, p, ht, pt) in enumerate(zip(test_hypothesis, test_premise, trans_hyp, trans_prem)):
             for k, j in zip(list(h.data.numpy()),list(p.data.numpy())):
                 e1 = self.find_examples(k, hyp=True)
                 e2 = e1.intersection(self.find_examples(j, hyp=False))
@@ -88,21 +90,35 @@ class Oracle():
                 if len(examples) != prev:
                     ids.add(i)
                     prev = len(examples)
+            a, b = [], []
+            for k1 in list(h.data.numpy()):
+                a.append(k1[0])
+            for j in list(p.data.numpy()):
+                b.append(j[0])
+
+            a1, b1 = [], []
+
+            for k1 in list(ht.data.numpy()[0]):
+                a1.append(k1)
+            for j in list(pt.data.numpy()[0]):
+                b1.append(j)
+
             for e in examples:
                 k = sim.get(i, [])
-                a,b= [],[]
-                for k1, j in zip(list(h.data.numpy()), list(p.data.numpy())):
-                    a.append(k1[0]); b.append(j[0])
-                k.append(min(self.get_jaccard(a, e.hypothesis),self.get_jaccard(b, e.premise)))
+                ktree = tree_sim.get(i, [])
 
+
+                k.append(min(self.get_jaccard(a, e.hypothesis),self.get_jaccard(b, e.premise)))
+                ktree.append(min(tree_edit(a1, e.hypothesis_transitions),tree_edit(b1, e.premise_transitions)))
                 sim[i] = k
+                tree_sim[i] = ktree
 
 
 
         train = self.train
         train.examples = list(examples)
 
-        return list(ids), train, sim
+        return list(ids), train, sim, tree_sim
 
 if __name__=='__main__':
     data_dir = '.data/snli/snli_1.0/'

@@ -169,35 +169,40 @@ def eval(args, file, finetune=False):
         az = 0
         if finetune:
             step = 0
-            ids, new_train, k = oracle.find_training_data(dev_batch.hypothesis.split(1,1), dev_batch.premise.split(1,1))
+            ids, new_train, k, q = oracle.find_training_data(dev_batch.hypothesis.split(1,1), dev_batch.premise.split(1,1),
+                                                          dev_batch.hypothesis_transitions.transpose(0, 1).split(1),
+                                                          dev_batch.premise_transitions.transpose(0, 1).split(1))
 
 
             print(print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0, 1)[0].data.numpy().tolist()), "---",
                                  print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[0].data.numpy().tolist()), label_names[dev_batch.label.data[0] - 1])
             if 0 in k.keys():
                 j = k[0]
+                l = q[0]
             else:
                 j = []
+                l = []
         #    print(len(new_train.examples), type(new_train.examples))
             examples  =[]
             max1 = -1; az = 0
-            for k,i in zip(j,new_train.examples):
+            for z, k,i in zip(l, j,new_train.examples):
 
                 if k >= 0.1:
                     if k > max1:
                         max1 = k
                         az = i.label
-                    print(k , "\t",  " ".join(i.hypothesis),
-                         "---",
-                          " ".join(i.premise),
-                         i.label)
+                    # print(z, k , "\t",  " ".join(i.hypothesis),
+                    #      "---",
+                    #       " ".join(i.premise),
+                    #      i.label)
                     count[i.label] += 1
                     similarity[i.label] += k
-                    examples.append(i)
+                    if z <= 5:
+                        examples.append(i)
             new_train.examples = examples
             train_iter, _, _ = data.BucketIterator.splits(
                 (new_train, dev, test), batch_size=32, device=args.gpu)
-           # print("Encoded")
+
             model = torch.load(file, map_location=lambda storage, loc: storage)
             model.cpu()
             loss = torch.nn.NLLLoss()
@@ -212,14 +217,13 @@ def eval(args, file, finetune=False):
                 (dev_batch.premise.transpose(0, 1),
                  dev_batch.premise_transitions.t()), args.gpu
             )
-          #  print("Encoded2")
+
             if len(examples )==0:
-         #       print ("here")
                 pass
             else:
                 train_iter.repeat = False
                 for batch_idx, batch in enumerate(train_iter):
-                 #   print (batch_idx)
+
                     model.train()
                     step += 1
                     train_batch(
@@ -228,8 +232,6 @@ def eval(args, file, finetune=False):
                         (batch.premise.transpose(0, 1), batch.premise_transitions.t()),
                         batch.label - 1, step=step
                     )
-         #   print("Encoded3")
-
 
         model.eval()
         pred = predict(
@@ -261,32 +263,32 @@ def eval(args, file, finetune=False):
             zz = pred_values_by_cat_pre[pred_values_by_cat_pre == i]
             nn = pred_values_by_cat[pred_values_by_cat == i]
 
-            # for i1 in true_labels_by_cat.tolist():
-            #    if (pred_pre[i1] != i):
-            #        if (pred[i1] == i):
-            #            print("good", )
-            #        else:
-            #            print("same1", )
-            #        print (print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()), "---",
-            #               print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist()))
-            #        print (i1 in ids, i1, label_names[i], label_names[pred_pre[i1]])
-            #        if i1 in ids:
-            #            good_true += 1
-            #        else:
-            #          good_false += 1
-            #
-            #    if (pred_pre[i1] == i ):
-            #        if(pred[i1] == i):
-            #            print("same2,",)
-            #        else:
-            #            print("worse",)
-            #        print ("******", print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()),
-            #               print_string(inputs.vocab.itos,  dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist())), "---",
-            #        print (i1 in ids, i1, label_names[pred[i1]], label_names[pred_pre[i1]])
-            #        if i1 in ids:
-            #            bad_true += 1
-            #        else:
-            #            bad_false += 1
+            for i1 in true_labels_by_cat.tolist():
+               if (pred_pre[i1] != i):
+                   if (pred[i1] == i):
+                       print("good", )
+                   else:
+                       print("same1", )
+                   print (print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()), "---",
+                          print_string(inputs.vocab.itos, dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist()))
+                   print (i1 in ids, i1, label_names[i], label_names[pred_pre[i1]])
+                   if i1 in ids:
+                       good_true += 1
+                   else:
+                     good_false += 1
+
+               if (pred_pre[i1] == i ):
+                   if(pred[i1] == i):
+                       print("same2,",)
+                   else:
+                       print("worse",)
+                   print ("******", print_string(inputs.vocab.itos, dev_batch.hypothesis.transpose(0,1)[i1].data.numpy().tolist()),
+                          print_string(inputs.vocab.itos,  dev_batch.premise.transpose(0, 1)[i1].data.numpy().tolist())), "---",
+                   print (i1 in ids, i1, label_names[pred[i1]], label_names[pred_pre[i1]])
+                   if i1 in ids:
+                       bad_true += 1
+                   else:
+                       bad_false += 1
 
             num_labels_by_cat = len(true_labels_by_cat)
             mass_so_far = 0
@@ -319,7 +321,7 @@ def eval(args, file, finetune=False):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='SPINN dependency parse + SNLI Classifier arguments.')
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--embed_dim', type=int, default=300)
     parser.add_argument('--hidden_size', type=int, default=300)
     parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate to pass to optimizer.')
@@ -337,4 +339,4 @@ if __name__=='__main__':
     render_args(args)
     sys.stdout.flush()
    # train(args)
-    eval(args, "mytraining16.pt", finetune=False)
+    eval(args, "mytraining16.pt", finetune=True)
