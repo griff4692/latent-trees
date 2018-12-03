@@ -1,6 +1,6 @@
 # latent-trees
 
-This is the code-base for the final project for Neural Networks for Machine Translation
+This is the code-base for the final project for Neural Networks for Natural Language Processing
 
 The `master` branch has the basic SPINN implemented.
 
